@@ -31,6 +31,8 @@ Starting points, not exhaustive reading lists.
 |---|---|
 | Understand or explain the system | `README.md` |
 | Current status or open decisions | `STATE.md` |
+| Test cases, expected results, behaviour rules | `tests/CASES.md`, `tests/make_cases.py`, `tests/cases/` |
+| Eval gate and recorded runs | `evals/eval_config.yaml`, `evals/RESULTS.md` |
 | Documentation / README / ADR work | the artifact itself; `.githooks/validate_artifacts.py` for enforced structure |
 
 ## Always-on constraints
@@ -45,8 +47,13 @@ Starting points, not exhaustive reading lists.
   exists.
 - No secrets or machine-local absolute paths in tracked files.
 - Never rewrite git history.
+- The eval gate is fixed before the build; never change a case, expected
+  result or threshold to make a run pass (new dated version only).
+- The hold-out cases are written by a separate session. A building
+  session never opens the q119-holdout folder before the final run.
 - This file is an instruction surface, not a security boundary.
 
 ## Verification
 
 - Tier 0 structure: `python .githooks/validate_artifacts.py .`
+- Test cases consistent with the reference validator: `python tests/make_cases.py`

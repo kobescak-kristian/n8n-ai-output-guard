@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lead_score",
+  "description": "Lead scoring answer of the Q-116 lead qualifier (n8n-ai-lead-qualifier, node 'Check AI answer'), written as a JSON Schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["industry", "company_size", "fit_score", "confidence", "reason", "signals", "red_flags", "manipulation_attempt"],
+  "properties": {
+    "industry": {"type": "string", "maxLength": 100},
+    "company_size": {"type": "string", "enum": ["1-9", "10-49", "50-249", "250-999", "1000-4999", "5000+", "unknown"]},
+    "fit_score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 800},
+    "signals": {"type": "array", "items": {"type": "string"}},
+    "red_flags": {"type": "array", "items": {"type": "string"}},
+    "manipulation_attempt": {"type": "boolean"}
+  }
+}

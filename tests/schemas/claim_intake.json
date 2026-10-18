@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "claim_intake",
+  "description": "Fields an insurance claims team reads from a first-notice-of-loss e-mail (shape of research post C-17).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policy_number", "claimant_name", "incident_date", "claim_type", "estimated_amount", "currency", "injury_reported", "summary", "urgency"],
+  "properties": {
+    "policy_number": {"type": "string", "pattern": "^[A-Z]{2}-[0-9]{6}$"},
+    "claimant_name": {"type": "string", "minLength": 2, "maxLength": 100},
+    "incident_date": {"type": "string", "format": "date"},
+    "claim_type": {"type": "string", "enum": ["auto", "property", "health", "travel", "liability", "other"]},
+    "estimated_amount": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "injury_reported": {"type": "boolean"},
+    "summary": {"type": "string", "minLength": 10, "maxLength": 500},
+    "urgency": {"type": "string", "enum": ["low", "normal", "high"]}
+  }
+}

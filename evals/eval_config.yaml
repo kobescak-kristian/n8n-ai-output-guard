@@ -1,0 +1,138 @@
+# Eval gate: n8n AI output guard and fix kit (Q-119)
+# Committed before any workflow code (eval-gate rule 1). The guard is built
+# against this gate, never the reverse. Changing a threshold or a metric after
+# the first recorded run needs a new dated version of this file and a note in
+# evals/RESULTS.md; the old version stays in git history.
+version: 1
+date: 2026-10-18
+standard: "Owner test standard, career launch plan, section 'Test standard for every build' (owner 2026-10-18)"
+behaviour_rules: "tests/CASES.md section 3 (the rules the expected results encode)"
+
+# --- Gate: PASS iff every gated metric holds on EACH of the 3 runs ---
+gate: >-
+  PASS iff, on each of 3 full runs over visible + hold-out gated cases:
+  unchecked_data_returned == 0 AND caller_crashes == 0 AND injection_leaks == 0 AND
+  untouched_rate == 1.0 AND validator_agreement == 1.0 AND retry_rule_breaks == 0 AND
+  log_complete == 1.0 AND review_complete == 1.0 AND alert_correct == 1.0 AND
+  reviewer_exact == 1.0 AND simulated_changes == 0 AND
+  fix_kit_after_crashes == 0 AND fix_kit_after_bad_rows == 0 AND
+  status_accuracy >= 0.90.
+  The result line reports the worst run per metric.
+
+thresholds:
+  unchecked_data_returned_max: 0
+  caller_crashes_max: 0
+  injection_leaks_max: 0
+  untouched_rate_min: 1.0
+  validator_agreement_min: 1.0
+  retry_rule_breaks_max: 0
+  log_complete_min: 1.0
+  review_complete_min: 1.0
+  alert_correct_min: 1.0
+  reviewer_exact_min: 1.0
+  simulated_changes_max: 0
+  fix_kit_after_crashes_max: 0
+  fix_kit_after_bad_rows_max: 0
+  status_accuracy_min: 0.90
+
+# --- Metric definitions (one sentence each; truth = expected fields of each case) ---
+metrics:
+  unchecked_data_returned: >-
+    Number of guard results with status ok, ok_after_retry or fallback whose data is null or fails the
+    reference validator (python jsonschema, Draft 2020-12, format checker on) for the case schema.
+  caller_crashes: >-
+    Number of guard calls where the test caller did not get a guard result (n8n execution error, or no
+    response within 180 seconds).
+  injection_leaks: >-
+    Number of prompt_injection cases with obvious_injection true whose status is not needs_review.
+  untouched_rate: >-
+    Of results with status ok or ok_after_retry, the fraction whose data equals exactly the last raw answer
+    after the cleaning rule (CASES.md rule 3) and JSON parsing; for simulated cases also equals expected.data.
+  validator_agreement: >-
+    Of all logged attempts that returned text, the fraction where the guard's schema verdict (pass / fail)
+    equals the reference validator's verdict on the same raw text after the cleaning rule.
+  retry_rule_breaks: >-
+    Number of cases where the AI step was called more than 2 times, the second AI step more than once, a
+    401/403 was retried, a retryable error was not retried, expected.attempts differs from the logged
+    attempts, or the logged wait before a 429 retry is below expected.min_wait_seconds.
+  log_complete: >-
+    Of all guard calls, the fraction with exactly one log row whose status equals the returned status.
+  review_complete: >-
+    Of results with status needs_review, the fraction with a pending review queue row and a Slack review
+    message ID (Slack API answered ok).
+  alert_correct: >-
+    Of all cases, the fraction where an alert was sent if and only if expected.alert is true
+    (Slack alert message ID present in the log row).
+  reviewer_exact: >-
+    Of cases with a scripted review_action, the fraction where after the action the on_approved workflow got
+    exactly the corrected or approved data once, a reject gave no on_approved call, and an invalid correction
+    left the item pending with no on_approved call.
+  simulated_changes: >-
+    Number of simulated cases whose status, attempts or data differ between any two of the 3 runs.
+  fix_kit_after_crashes: >-
+    On the fix-kit run of the AFTER workflow, the number of claim cases where the workflow stopped with an
+    error.
+  fix_kit_after_bad_rows: >-
+    On the fix-kit run of the AFTER workflow, the number of claims-table rows that fail the reference validator,
+    or that come from a case whose expected status is needs_review or failed.
+  status_accuracy: >-
+    Of all gated cases, the fraction whose returned status is listed in expected.status.
+
+secondary_reported_not_gated:
+  per_kind_accuracy: "status accuracy per kind, visible and hold-out separately"
+  live_changes: "every live case whose status or data differs between the 3 runs, listed by id"
+  known_limits: "outcome of every gated: false case (for example PI07, subtle injection), with the data returned"
+  false_injection_flags: "correct-kind cases sent to review only because of the injection check"
+  fix_kit_before: "BEFORE workflow on the same claim cases: crashes, bad rows saved, silent wrong rows; recorded, not gated"
+  guard_overhead: "median and 90th percentile seconds added by the guard on ok results (guard time minus AI step time)"
+  cost: "tokens and AI cost of live calls per run, from logged token counts and the model price at run date"
+  manual_slack_pass: "one real Slack review pass by the owner for the Loom; recorded, not gated"
+
+# --- Comparison policy (binding for case files and the scorer alike) ---
+comparison_policy:
+  data_equality: "deep equality of parsed JSON; numbers compared as values (3400 == 3400.0); strings exact, byte for byte"
+  status: "exact string, one of ok, ok_after_retry, fallback, needs_review, failed"
+  error_contains: "case-insensitive substring of the joined error list"
+  timing: "seconds from the log row; min_wait_seconds is a lower bound with no tolerance"
+  slack: "a message counts when the log row holds the Slack message ID (ts) returned by the Slack API"
+
+# --- Dataset ---
+dataset:
+  provenance: >-
+    Synthetic, written by hand in the generator. Inputs follow client words and messy formats from the research
+    posts (C-17 claim e-mails, support tickets, Q-116 lead forms); mock answers follow real failure shapes of LLM
+    output. All names, policy numbers and addresses are made up (example.com).
+  visible_set:
+    generator: tests/make_cases.py
+    file: tests/cases/visible.json
+    cases: 54
+    per_kind: "7 each for malformed_json, schema_fields, out_of_range, empty_refusal, api_error, prompt_injection, correct; 5 setup"
+    per_status_gated: "needs_review 23, ok_after_retry 12, ok 8, fallback 5, failed 5"
+    live: 10
+    deterministic: "two runs of the generator give the same SHA-256 (checked 2026-10-18)"
+    self_check: "the generator asserts every simulated expected status against the reference validator"
+  hold_out_set:
+    share: "about 30% of all cases: at least 23 cases (at least 3 per kind, including setup)"
+    author: "a separate session that does not build the guard; the builder does not see the cases before the final run"
+    input: "the author reads tests/CASES.md and tests/schemas/ only, not the guard workflow"
+    commitment: "evals/holdout_commitment.json: case count, count per kind and per status, SHA-256 of the sealed archive; committed before the guard build starts"
+    storage: "archive kept in the folder q119-holdout in the owner's user profile, outside every git repository"
+    opening: "at the final run the archive SHA-256 must equal the committed value, or the hold-out result is void"
+  fix_kit_set: "all claim_intake cases (visible + hold-out) run through the BEFORE and the AFTER workflow"
+
+# --- Runs ---
+runs:
+  count: 3
+  scope: "visible + hold-out, same guard version, same model; log, queue and claims tables cleared before each run"
+  simulated: "answers from the local mock AI server (tests/, port 8120); the guard workflow is the same one used live"
+  live: "real Claude through the Anthropic workspace n8n-output-guard; model fixed in the AI step settings and recorded per run"
+  reviewer: "the test runner submits each scripted review_action through the same review form a person uses"
+  recording: "every run is appended to evals/RESULTS.md, pass or fail, never edited (eval-gate rules 2-4)"
+  done: "results artifact committed AND runner exit code 0"
+
+# --- Claim discipline ---
+claims:
+  allowed: "numbers in README or the client result line come only from a committed RESULTS.md entry, worst run"
+  wording: "'on my test set of N cases (M simulated, K live)'; simulated failures are always called simulated"
+  supports: "these runs show the guard follows its rules (reliability of the guard); they do not measure the accuracy of any AI step"
+  not_measured: "real client traffic, failure rates of real models, subtle prompt injection, volumes above the test set"

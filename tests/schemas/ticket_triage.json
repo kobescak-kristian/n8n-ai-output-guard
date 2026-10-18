@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ticket_triage",
+  "description": "Triage of one customer support message (support and e-mail triage posts in the research).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["category", "priority", "language", "sentiment", "needs_human", "summary", "tags"],
+  "properties": {
+    "category": {"type": "string", "enum": ["billing", "technical", "shipping", "account", "other"]},
+    "priority": {"type": "string", "enum": ["low", "normal", "urgent"]},
+    "language": {"type": "string", "pattern": "^[a-z]{2}$"},
+    "sentiment": {"type": "number", "minimum": -1, "maximum": 1},
+    "needs_human": {"type": "boolean"},
+    "summary": {"type": "string", "minLength": 10, "maxLength": 300},
+    "tags": {"type": "array", "maxItems": 5, "items": {"type": "string", "minLength": 1, "maxLength": 30}}
+  }
+}
