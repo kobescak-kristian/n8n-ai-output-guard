@@ -1,0 +1,29 @@
+{
+  "about": "Commitment to the Q-119 hold-out test set (n8n AI output guard). The cases were written by a separate session that does not build the guard, from tests/CASES.md and tests/schemas/ only, and sealed before the guard build. This file holds only counts and the archive hash, no case content.",
+  "date": "2026-10-18",
+  "case_count": 31,
+  "gated_count": 30,
+  "count_per_kind": {
+    "malformed_json": 5,
+    "schema_fields": 3,
+    "out_of_range": 3,
+    "empty_refusal": 3,
+    "api_error": 4,
+    "prompt_injection": 5,
+    "correct": 5,
+    "setup": 3
+  },
+  "count_per_status": {
+    "ok": 7,
+    "ok_after_retry": 5,
+    "fallback": 7,
+    "needs_review": 9,
+    "failed": 3
+  },
+  "count_per_status_rule": "first listed expected status of each case; 3 live correct cases also accept ok_after_retry, and 1 gated-false subtle injection case also accepts needs_review",
+  "live_count": 8,
+  "simulated_count": 23,
+  "archive_file": "holdout.zip",
+  "archive_sha256": "3935e1a23c3d7549d4e6a5aa0946a5c8ec292e0df2d787ffbd5413a4365ae346",
+  "how_to_open": "At the final run only: take holdout.zip from the folder q119-holdout in the owner's user profile. Check that its SHA-256 equals archive_sha256; if it does not, the hold-out result is void. Then unzip it and follow README.txt inside."
+}
