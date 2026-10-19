@@ -236,7 +236,11 @@ try {
     const pv = isObj(fb.value) ? validate(S.schema, fb.value) : ['the default value must be one JSON object'];
     if (pv.length) setupFail('setup: default fallback does not match the schema: ' + pv.join('; '));
   } else if (fb.mode === 'second_step' && !fb.second_step_id) setupFail('setup: second AI step missing');
-  if (S.setup_ok) { S.injection_hits = injectionHits(S.ai_input, S.schema); S.injection = S.injection_hits.length > 0; }
+  if (S.setup_ok) {
+    // a check error must never let the input through unchecked: it sends the item to a person
+    try { S.injection_hits = injectionHits(S.ai_input, S.schema); } catch (e) { S.injection_hits = ['injection check error: ' + e.message]; }
+    S.injection = S.injection_hits.length > 0;
+  }
 } catch (err) { setupFail('setup: guard error: ' + err.message); }
 return [{ json: S }];
 """

@@ -144,6 +144,10 @@ LONG_INPUTS = [  # must finish in under 1 second each (fix red team finding 2)
     ("ticket_triage", "\n ".join([""] * 10000)),
     ("claim_intake", "Water came through the ceiling. " * 600),
     ("ticket_triage", "SYSTEM:" + " " * 20000 + "x"),
+    ("ticket_triage", "Hello. " + "\u202f" * 5000 + " Thanks."),
+    ("ticket_triage", "Hello. " + "\n\u202f" * 3000 + " Thanks."),
+    ("ticket_triage", "Hello. " + "\n\f" * 3000 + " Thanks."),
+    ("ticket_triage", "Hi team, " + "\u2028 \u1680 \u205f" * 2000 + " end"),
 ]
 
 
@@ -162,6 +166,9 @@ def main():
     rows += [("rt-attack %d" % i, s, t, True) for i, (s, t) in enumerate(RT.MISSED_ATTACKS, 1)]
     rows += [("rt-flagged %d" % i, s, t, False) for i, (s, t) in enumerate(RT.WRONGLY_FLAGGED, 1)]
     rows += [("rt-normal %d" % i, s, t, False) for i, (s, t) in enumerate(RT.NORMAL_NOT_FLAGGED_OK, 1)]
+    rows += [("rt2-attack %d" % i, s, t, True) for i, (s, t) in enumerate(RT.MISSED_ATTACKS2, 1)]
+    rows += [("rt2-flagged %d" % i, s, t, False) for i, (s, t) in enumerate(RT.WRONGLY_FLAGGED2, 1)]
+    rows += [("rt2-normal %d" % i, s, t, False) for i, (s, t) in enumerate(RT.NORMAL_OK2, 1)]
     rows += [("long %d" % i, s, t, None) for i, (s, t) in enumerate(LONG_INPUTS, 1)]
     out = run_node([{"input": {"text": t}, "schema": SCHEMAS[s]} for _, s, t, _ in rows])
     bad = 0
