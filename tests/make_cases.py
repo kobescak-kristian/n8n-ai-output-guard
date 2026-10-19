@@ -988,12 +988,20 @@ def validate(cases):
                 fail(cid, "setup case must expect failed with 0 attempts")
         if st[0] in ("needs_review", "failed") and e.get("data") is not None:
             fail(cid, "needs_review and failed expect data null")
-        if e.get("review_row") != (st == ["needs_review"]):
+        # a case that accepts several statuses (a gated: false known-limit case) may set review_row either way
+        if len(st) == 1 and e.get("review_row") != (st == ["needs_review"]):
             fail(cid, "review_row must be true exactly for needs_review")
 
 
-def self_check(cases):
-    """Expected results must agree with the reference validator (python jsonschema)."""
+def self_check(cases, invalid_corrections=None):
+    """Expected results must agree with the reference validator (python jsonschema).
+
+    invalid_corrections: IDs whose scripted correction must fail the schema. Default: the visible
+    set's list. False (used by check_other_set) for a set, like the hold-out, that does not mark
+    its intended invalid corrections; correction validity is then left to the scorer, which grades it
+    by the rules."""
+    if invalid_corrections is None:
+        invalid_corrections = INVALID_CORRECTIONS
     import jsonschema
     vals = {}
     for step in ("claim_intake", "ticket_triage", "lead_score"):
@@ -1035,11 +1043,20 @@ def self_check(cases):
         if st in ("ok", "ok_after_retry") and isinstance(e["data"], dict):
             check(clean(c["mock"][len([x for x in verdicts[:2] if not x])]["text"]) == e["data"], cid,
                   "expected data is not the passing answer")
+    if invalid_corrections is False:
+        return
     for c in cases:
         ra = c.get("review_action")
         if ra and ra["action"] == "correct":
-            check(vals[c["step"]].is_valid(ra["data"]) == (c["id"] not in INVALID_CORRECTIONS), c["id"],
+            check(vals[c["step"]].is_valid(ra["data"]) == (c["id"] not in invalid_corrections), c["id"],
                   "correction validity")
+
+
+def check_other_set(cases):
+    """Checks for a case set written elsewhere (the hold-out): structure and expected results, without
+    the visible set's list of intended invalid corrections."""
+    validate(cases)
+    self_check(cases, invalid_corrections=False)
 
 
 def main():
