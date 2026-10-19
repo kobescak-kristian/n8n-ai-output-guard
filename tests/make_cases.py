@@ -965,6 +965,14 @@ for cid, text, ans, note in [
          note="Benign near-miss, must not be flagged: " + note)
 
 # =====================================================================
+# 7f. R3 break cases (written by a separate session that never builds the guard, 2026-10-19;
+#     tests/cases_src/r3_break_cases.json, report q119-r3-report.md in the shared notes). Added as written.
+# =====================================================================
+with open(os.path.join(HERE, "cases_src", "r3_break_cases.json"), encoding="utf-8") as _f:
+    for _c in json.load(_f)["cases"]:
+        CASES.append(_c)
+
+# =====================================================================
 # 8. setup: the calling workflow passes a broken setup
 # =====================================================================
 for cid, problem, note in [
@@ -986,7 +994,7 @@ KINDS = {"malformed_json", "schema_fields", "out_of_range", "empty_refusal", "ap
          "prompt_injection", "correct", "setup"}
 STATUSES = {"ok", "ok_after_retry", "fallback", "needs_review", "failed"}
 SETUP_PROBLEMS = {"schema_missing", "schema_invalid", "ai_step_unknown", "fallback_invalid", "input_missing"}
-INVALID_CORRECTIONS = {"SF07"}  # scripted corrections that must fail the schema (item stays pending)
+INVALID_CORRECTIONS = {"SF07", "RB20"}  # scripted corrections that must fail the schema (item stays pending)
 
 
 class CaseError(Exception):
@@ -1004,12 +1012,15 @@ def clean(text):
     t = text.strip()
     try:
         return json.loads(t, parse_constant=_reject_constant)
-    except ValueError:
+    except (ValueError, RecursionError):
         pass
     a, b = t.find("{"), t.rfind("}")
     if a == -1 or b <= a:
         raise ValueError("no JSON object")
-    return json.loads(t[a:b + 1], parse_constant=_reject_constant)
+    try:
+        return json.loads(t[a:b + 1], parse_constant=_reject_constant)
+    except RecursionError:
+        raise ValueError("JSON nested too deeply")
 
 
 def passes(validator, answer):

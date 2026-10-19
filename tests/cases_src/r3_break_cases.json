@@ -1,0 +1,1145 @@
+{
+ "cases": [
+  {
+   "id": "RB01",
+   "kind": "malformed_json",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "Hi, I was charged twice for my October subscription (order #A-55821),\nboth on 10/01. Please refund one of them. Thanks, Priya"
+   },
+   "expected": {
+    "status": [
+     "ok"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "category": "billing",
+     "priority": "normal",
+     "language": "en",
+     "sentiment": -0.3,
+     "needs_human": false,
+     "summary": "Charged twice for October subscription; wants one charge refunded.",
+     "tags": [
+      "double-charge",
+      "refund"
+     ]
+    },
+    "attempts": 1
+   },
+   "note": "Answer starts with a byte-order mark and wraps the object in [ ]: not valid JSON as it is, so cleaning takes { to } and the object passes (reference agrees). Trimming the BOM first would parse an array and fail.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "﻿[{\"category\": \"billing\", \"priority\": \"normal\", \"language\": \"en\", \"sentiment\": -0.3, \"needs_human\": false, \"summary\": \"Charged twice for October subscription; wants one charge refunded.\", \"tags\": [\"double-charge\", \"refund\"]}]"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB02",
+   "kind": "malformed_json",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: claim\n\nhi my car got hit in parking lot while i was in the gym, they drove away,\npolicy AU-209384, my name is jordan reyes, happened yesterday 2026-10-16,\ndoor dented and mirror broke, shop says 950 bucks. no injuries"
+   },
+   "expected": {
+    "status": [
+     "fallback"
+    ],
+    "alert": true,
+    "review_row": false,
+    "data": {
+     "policy_number": "AU-209384",
+     "claimant_name": "Jordan Reyes",
+     "incident_date": "2026-10-16",
+     "claim_type": "auto",
+     "estimated_amount": 950,
+     "currency": "USD",
+     "injury_reported": false,
+     "summary": "Hit-and-run in a parking lot; door dented and mirror broken; shop estimate $950.",
+     "urgency": "normal"
+    },
+    "attempts": 2
+   },
+   "note": "Second AI step answers [object] followed by a byte-order mark: not valid JSON as it is, cleaning gives the object, which passes (same cleaning for the second step, 3b rule 7). Fallback with that data.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"AU-209384\", \"claimant_name\": \"Jordan Reyes\", \"incident_date\": \"yesterday\", \"claim_type\": \"auto\", \"estimated_amount\": 950, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hit-and-run in a parking lot; door dented and mirror broken; shop estimate $950.\", \"urgency\": \"normal\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"AU-209384\", \"claimant_name\": \"Jordan Reyes\", \"incident_date\": \"yesterday\", \"claim_type\": \"auto\", \"estimated_amount\": 950, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hit-and-run in a parking lot; door dented and mirror broken; shop estimate $950.\", \"urgency\": \"normal\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "http": 200,
+      "stop_reason": "end_turn",
+      "text": "[{\"policy_number\": \"AU-209384\", \"claimant_name\": \"Jordan Reyes\", \"incident_date\": \"2026-10-16\", \"claim_type\": \"auto\", \"estimated_amount\": 950, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hit-and-run in a parking lot; door dented and mirror broken; shop estimate $950.\", \"urgency\": \"normal\"}]﻿"
+     }
+    ]
+   }
+  },
+  {
+   "id": "RB03",
+   "kind": "api_error",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "THE APP KEEPS CRASHING WHEN I OPEN THE INVOICES TAB!!! since the update\nyesterday. iphone 15, ios 19. i have a client meeting in 1 hour and need\nthose invoices NOW"
+   },
+   "expected": {
+    "status": [
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "category": "technical",
+     "priority": "urgent",
+     "language": "en",
+     "sentiment": -0.9,
+     "needs_human": true,
+     "summary": "App crashes on the invoices tab since yesterday's update (iPhone 15, iOS 19).",
+     "tags": [
+      "crash",
+      "ios",
+      "invoices"
+     ]
+    },
+    "attempts": 2,
+    "min_wait_seconds": 20
+   },
+   "note": "429 with a 401-digit retry-after (valid delay-seconds syntax, far above 20): cap at 20 s, wait 20 s. Number() of it is Infinity; treating that as 'no retry-after' (1 s) breaks the rule.",
+   "mock": [
+    {
+     "http": 429,
+     "retry_after": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"technical\", \"priority\": \"urgent\", \"language\": \"en\", \"sentiment\": -0.9, \"needs_human\": true, \"summary\": \"App crashes on the invoices tab since yesterday's update (iPhone 15, iOS 19).\", \"tags\": [\"crash\", \"ios\", \"invoices\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB04",
+   "kind": "api_error",
+   "step": "lead_score",
+   "source": "simulated",
+   "input": {
+    "text": "Name: Laura Mendez, Operations Manager, Northwind Logistics (northwind-logistics.example.com).\nMessage: We re-type about 200 shipment orders a week from customer emails into our\ntransport system. I want this automated. Budget is approved for this quarter and we\nwould like to start within 4 weeks."
+   },
+   "expected": {
+    "status": [
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "industry": "Logistics",
+     "company_size": "50-249",
+     "fit_score": 88,
+     "confidence": 0.86,
+     "reason": "Clear manual process, approved budget and a start date within 4 weeks.",
+     "signals": [
+      "approved budget",
+      "200 orders a week typed by hand",
+      "start within 4 weeks"
+     ],
+     "red_flags": [],
+     "manipulation_attempt": false
+    },
+    "attempts": 2,
+    "min_wait_seconds": 20
+   },
+   "note": "429 whose retry-after is an HTTP date far in the future (RFC 9110 form): the wait it asks for is above 20 s, so wait 20 s. Assumes rule 2 covers the date form; drop if the owner reads it as seconds only.",
+   "mock": [
+    {
+     "http": 429,
+     "retry_after": "Fri, 31 Dec 2100 23:59:59 GMT"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"industry\": \"Logistics\", \"company_size\": \"50-249\", \"fit_score\": 88, \"confidence\": 0.86, \"reason\": \"Clear manual process, approved budget and a start date within 4 weeks.\", \"signals\": [\"approved budget\", \"200 orders a week typed by hand\", \"start within 4 weeks\"], \"red_flags\": [], \"manipulation_attempt\": false}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB05",
+   "kind": "out_of_range",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: Hail damage roof\n\nPolicy PR-561203, Helga Brandt-Moreau.\nHailstorm on 2026-10-03 damaged the roof and two skylights. Roofer estimate\nattached: USD 12,300. No injuries. Leaking when it rains, so the sooner the\nbetter."
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Summary over 500 characters twice, with a house emoji whose first half is the 400th UTF-16 unit of the answer: a review row and a Slack review message are still due (cutting the answer at 400 units leaves half an emoji in the Slack text).",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"PR-561203\", \"claimant_name\": \"Helga Brandt-Moreau\", \"incident_date\": \"2026-10-03\", \"claim_type\": \"property\", \"estimated_amount\": 12300, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hailstorm on 2026-10-03 damaged the roof and two skylights of the insured home; roofer estimate USD 12,300. Water is leaking into the upstairs hallway and the bedroom every time it rains,🏠 buckets are in place and the family is sleeping downstairs for now. No injuries. The insured asks for a quick visit by an adjuster because more rain is forecast for the coming week and the ceiling plaster is starting to sag in two places. Photos of the roof, the skylights and the ceiling are attached to the e-mail, together with the roofer's written estimate and the receipt for the emergency tarp that was put on the roof the day after the storm.\", \"urgency\": \"high\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"PR-561203\", \"claimant_name\": \"Helga Brandt-Moreau\", \"incident_date\": \"2026-10-03\", \"claim_type\": \"property\", \"estimated_amount\": 12300, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hailstorm on 2026-10-03 damaged the roof and two skylights of the insured home; roofer estimate USD 12,300. Water is leaking into the upstairs hallway and the bedroom every time it rains,🏠 buckets are in place and the family is sleeping downstairs for now. No injuries. The insured asks for a quick visit by an adjuster because more rain is forecast for the coming week and the ceiling plaster is starting to sag in two places. Photos of the roof, the skylights and the ceiling are attached to the e-mail, together with the roofer's written estimate and the receipt for the emergency tarp that was put on the roof the day after the storm.\", \"urgency\": \"high\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB06",
+   "kind": "out_of_range",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "Hello, my order 55190 (two kitchen chairs) was delivered to my neighbour at number 18 instead of to me at number 81. The tracking page says delivered on Tuesday at 14:02 but nothing came to my door, and my neighbour is away until next month so I cannot get it back myself. Could you please 🙏 send a new set or refund me? Thanks a lot. Sarah"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Priority 'high' (not allowed) twice. The input has an emoji whose first half is unit 300 of the input as JSON: the review row and the Slack review message must still be there.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"shipping\", \"priority\": \"high\", \"language\": \"en\", \"sentiment\": -0.4, \"needs_human\": false, \"summary\": \"Order 55190 delivered to the wrong house; customer asks for a replacement or refund.\", \"tags\": [\"wrong-address\"]}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"shipping\", \"priority\": \"high\", \"language\": \"en\", \"sentiment\": -0.4, \"needs_human\": false, \"summary\": \"Order 55190 delivered to the wrong house; customer asks for a replacement or refund.\", \"tags\": [\"wrong-address\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB07",
+   "kind": "schema_fields",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: Water damage - URGENT\n\nPolicy number: PR-100457\nName: Marcus Oyelaran\n\nPipe burst in the upstairs bathroom last night (2026-10-14). Water came\nthrough the kitchen ceiling, ceiling partly down, floor soaked. Plumber\nalready came. Contractor quote for ceiling + floor is $18,750.00. Nobody\ninjured. We have a newborn and can't stay in the house, please call me\nasap 555-0142."
+   },
+   "expected": {
+    "status": [
+     "fallback"
+    ],
+    "alert": true,
+    "review_row": false,
+    "data": {
+     "policy_number": "PR-100457",
+     "claimant_name": "Unknown claimant",
+     "incident_date": "2026-10-14",
+     "claim_type": "other",
+     "estimated_amount": null,
+     "currency": "USD",
+     "injury_reported": false,
+     "summary": "Automatic extraction failed; a claims handler must read the e-mail.",
+     "urgency": "normal"
+    },
+    "attempts": 2
+   },
+   "note": "Extra field whose name is 'notes' plus 250 pin emojis, twice; default fallback. The alert is due (rule 9); its error text holds the field name, and a cut at 500 UTF-16 units falls inside an emoji.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"PR-100457\", \"claimant_name\": \"Marcus Oyelaran\", \"incident_date\": \"2026-10-14\", \"claim_type\": \"property\", \"estimated_amount\": 18750.0, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Burst pipe flooded kitchen ceiling and floor; family cannot stay in the house; quote $18,750.\", \"urgency\": \"high\", \"notes 📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌\": \"check with the plumber\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"PR-100457\", \"claimant_name\": \"Marcus Oyelaran\", \"incident_date\": \"2026-10-14\", \"claim_type\": \"property\", \"estimated_amount\": 18750.0, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Burst pipe flooded kitchen ceiling and floor; family cannot stay in the house; quote $18,750.\", \"urgency\": \"high\", \"notes 📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌📌\": \"check with the plumber\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "default",
+    "value": {
+     "policy_number": "PR-100457",
+     "claimant_name": "Unknown claimant",
+     "incident_date": "2026-10-14",
+     "claim_type": "other",
+     "estimated_amount": null,
+     "currency": "USD",
+     "injury_reported": false,
+     "summary": "Automatic extraction failed; a claims handler must read the e-mail.",
+     "urgency": "normal"
+    }
+   }
+  },
+  {
+   "id": "RB08",
+   "kind": "api_error",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: Re: Re: travel claim\n\nSorry for the late reply. Policy TR-330918 (Ana Lucia Ferreira).\nMy checked bag never arrived in Lisbon on 2026-09-28. Airline gave\na reference. Bought clothes and toiletries, receipts attached, total\nEUR 1.212,40 (one thousand two hundred twelve euro forty).\nNot urgent but would like it settled before end of month.\nThanks, Ana"
+   },
+   "expected": {
+    "status": [
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "policy_number": "TR-330918",
+     "claimant_name": "Ana Lucia Ferreira",
+     "incident_date": "2026-09-28",
+     "claim_type": "travel",
+     "estimated_amount": 1212.4,
+     "currency": "EUR",
+     "injury_reported": false,
+     "summary": "Checked bag lost on arrival in Lisbon; replacement purchases EUR 1,212.40 with receipts.",
+     "urgency": "low"
+    },
+    "attempts": 2
+   },
+   "note": "408 request timeout (3b: retried like 429 and 5xx), then valid. No alert.",
+   "mock": [
+    {
+     "http": 408
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"TR-330918\", \"claimant_name\": \"Ana Lucia Ferreira\", \"incident_date\": \"2026-09-28\", \"claim_type\": \"travel\", \"estimated_amount\": 1212.4, \"currency\": \"EUR\", \"injury_reported\": false, \"summary\": \"Checked bag lost on arrival in Lisbon; replacement purchases EUR 1,212.40 with receipts.\", \"urgency\": \"low\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB09",
+   "kind": "api_error",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "hello how do i change the email on my account, the old one is from my\nprevious job and i cant log in there anymore"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "408, then a bad answer (priority 'medium'): last call is a bad answer and 408 is excluded from the 'any 4xx' alert reason, so needs_review with NO alert.",
+   "mock": [
+    {
+     "http": 408
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"account\", \"priority\": \"medium\", \"language\": \"en\", \"sentiment\": 0.0, \"needs_human\": false, \"summary\": \"Customer wants to change the account e-mail; no access to the old one.\", \"tags\": [\"email-change\", \"login\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB10",
+   "kind": "api_error",
+   "step": "lead_score",
+   "source": "simulated",
+   "input": {
+    "text": "Name: Sam, sam@studio-kite.example.com\nMessage: just exploring options, no budget yet, 6 person design studio"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": true,
+    "review_row": true,
+    "data": null,
+    "attempts": 1
+   },
+   "note": "401 on try 1 (no retry), second AI step gives a bad answer (fit_score 'low'): the last call is not an API error, but a call returned a 4xx other than 408/429, so the alert is still due.",
+   "mock": [
+    {
+     "http": 401
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "http": 200,
+      "stop_reason": "end_turn",
+      "text": "{\"industry\": \"Design\", \"company_size\": \"1-9\", \"fit_score\": \"low\", \"confidence\": 0.7, \"reason\": \"Very small studio, no budget, only exploring.\", \"signals\": [], \"red_flags\": [\"no budget\"], \"manipulation_attempt\": false}"
+     }
+    ]
+   }
+  },
+  {
+   "id": "RB11",
+   "kind": "api_error",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "Hola, pedí unas zapatillas hace 12 días (pedido 77310) y todavía no\nllegan. El seguimiento dice \"en tránsito\" desde el día 8. ¿Me pueden ayudar?\nGracias, Lucía"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": true,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Two bad answers (language 'spa'), then the second AI step gets a 429 with retry-after: the second step is never retried (3b rule 7), needs_review, alert (last call an API error).",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"shipping\", \"priority\": \"normal\", \"language\": \"spa\", \"sentiment\": -0.4, \"needs_human\": false, \"summary\": \"Order 77310 shows in transit since the 8th; customer asks for help.\", \"tags\": [\"late-delivery\"]}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"shipping\", \"priority\": \"normal\", \"language\": \"spa\", \"sentiment\": -0.4, \"needs_human\": false, \"summary\": \"Order 77310 shows in transit since the 8th; customer asks for help.\", \"tags\": [\"late-delivery\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "http": 429,
+      "retry_after": 2
+     }
+    ]
+   }
+  },
+  {
+   "id": "RB12",
+   "kind": "api_error",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: slip and fall at our store\n\nPolicy LI-775120 - Brightwater Hardware LLC.\nA customer slipped on a wet floor near aisle 4 on 10/02/2026 (October 2nd)\nand broke her wrist, ambulance came. Her lawyer sent a letter today. No amount\nyet. Our store manager Pete Lindqvist is the contact."
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": true,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Connection closed, then a bad answer; the second AI step does not answer within the 6 s timeout: needs_review with an alert (the second step ran last and timed out).",
+   "mock": [
+    {
+     "close_connection": true
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"LI-775120\", \"claimant_name\": \"Brightwater Hardware LLC\", \"incident_date\": \"2026-10-02\", \"claim_type\": \"liability\", \"estimated_amount\": null, \"currency\": \"USD\", \"injury_reported\": \"yes\", \"summary\": \"Customer slipped on a wet floor and broke her wrist; lawyer letter received; no amount yet.\", \"urgency\": \"high\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "delay_seconds": 20
+     }
+    ]
+   },
+   "options": {
+    "timeout_seconds": 6
+   }
+  },
+  {
+   "id": "RB13",
+   "kind": "api_error",
+   "step": "lead_score",
+   "source": "simulated",
+   "input": {
+    "text": "Name: Laura Mendez, Operations Manager, Northwind Logistics (northwind-logistics.example.com).\nMessage: We re-type about 200 shipment orders a week from customer emails into our\ntransport system. I want this automated. Budget is approved for this quarter and we\nwould like to start within 4 weeks."
+   },
+   "expected": {
+    "status": [
+     "fallback"
+    ],
+    "alert": true,
+    "review_row": false,
+    "data": {
+     "industry": "unknown",
+     "company_size": "unknown",
+     "fit_score": 0,
+     "confidence": 0,
+     "reason": "Not scored: the AI step was not available.",
+     "signals": [],
+     "red_flags": [],
+     "manipulation_attempt": false
+    },
+    "attempts": 1
+   },
+   "note": "404 (a 4xx other than 408/429): no retry, default fallback, alert.",
+   "mock": [
+    {
+     "http": 404
+    }
+   ],
+   "fallback": {
+    "mode": "default",
+    "value": {
+     "industry": "unknown",
+     "company_size": "unknown",
+     "fit_score": 0,
+     "confidence": 0,
+     "reason": "Not scored: the AI step was not available.",
+     "signals": [],
+     "red_flags": [],
+     "manipulation_attempt": false
+    }
+   }
+  },
+  {
+   "id": "RB14",
+   "kind": "out_of_range",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: FW: claim - rear ended on I-35\n\nHi team,\nforwarding from our customer below. Policy AU-482913.\n\n---------- Forwarded message ---------\nFrom: Dana Whitfield <dana.whitfield@mailbox.example.com>\nSent: Monday, October 12, 2026 7:42 AM\n\nHello, I was rear ended at a red light on Oct 9th around 5pm. Other driver\nadmitted it. Back bumper and trunk are smashed, the body shop said around\n$3,400 to fix. No one was hurt but my neck is a bit stiff, not seeing a doctor\nfor now. What do I need to send you??\n\nDana Whitfield\nSent from my iPhone"
+   },
+   "expected": {
+    "status": [
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "policy_number": "AU-482913",
+     "claimant_name": "Dana Whitfield",
+     "incident_date": "2026-10-09",
+     "claim_type": "auto",
+     "estimated_amount": 3400,
+     "currency": "USD",
+     "injury_reported": true,
+     "summary": "Rear-ended at a red light; bumper and trunk damaged, about $3,400. Mild neck stiffness, no doctor yet.",
+     "urgency": "normal"
+    },
+    "attempts": 2
+   },
+   "note": "Duplicate key 'urgency': strict JSON keeps the last value. Try 1 ends with 'urgent' (not allowed), try 2 starts with 'urgent' and ends with 'normal' (passes). Data has urgency 'normal'.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"AU-482913\", \"claimant_name\": \"Dana Whitfield\", \"incident_date\": \"2026-10-09\", \"claim_type\": \"auto\", \"estimated_amount\": 3400, \"currency\": \"USD\", \"injury_reported\": true, \"summary\": \"Rear-ended at a red light; bumper and trunk damaged, about $3,400. Mild neck stiffness, no doctor yet.\", \"urgency\": \"normal\", \"urgency\": \"urgent\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"urgency\": \"urgent\", \"policy_number\": \"AU-482913\", \"claimant_name\": \"Dana Whitfield\", \"incident_date\": \"2026-10-09\", \"claim_type\": \"auto\", \"estimated_amount\": 3400, \"currency\": \"USD\", \"injury_reported\": true, \"summary\": \"Rear-ended at a red light; bumper and trunk damaged, about $3,400. Mild neck stiffness, no doctor yet.\", \"urgency\": \"normal\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB15",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "simulated",
+   "input": {
+    "text": "Name: Laura Mendez, Operations Manager, Northwind Logistics (northwind-logistics.example.com).\nMessage: We re-type about 200 shipment orders a week from customer emails into our\ntransport system. I want this automated. Budget is approved for this quarter and we\nwould like to start within 4 weeks."
+   },
+   "expected": {
+    "status": [
+     "ok"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "industry": "Logistics",
+     "company_size": "50-249",
+     "fit_score": 88.0,
+     "confidence": 0.86,
+     "reason": "Clear manual process, approved budget and a start date within 4 weeks.",
+     "signals": [
+      "approved budget",
+      "200 orders a week typed by hand",
+      "start within 4 weeks"
+     ],
+     "red_flags": [],
+     "manipulation_attempt": false
+    },
+    "attempts": 1
+   },
+   "note": "fit_score written as 8.8E1 (a whole number in exponent form) and confidence with 20 decimals: valid, data are the parsed values (88, 0.86).",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"industry\": \"Logistics\", \"company_size\": \"50-249\", \"fit_score\": 8.8E1, \"confidence\": 0.86000000000000000001, \"reason\": \"Clear manual process, approved budget and a start date within 4 weeks.\", \"signals\": [\"approved budget\", \"200 orders a week typed by hand\", \"start within 4 weeks\"], \"red_flags\": [], \"manipulation_attempt\": false}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB16",
+   "kind": "out_of_range",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: Hail damage roof\n\nPolicy PR-561203, Helga Brandt-Moreau.\nHailstorm on 2026-10-03 damaged the roof and two skylights. Roofer estimate\nattached: USD 12,300. No injuries. Leaking when it rains, so the sooner the\nbetter."
+   },
+   "expected": {
+    "status": [
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "policy_number": "PR-561203",
+     "claimant_name": "Helga Brandt-Moreau",
+     "incident_date": "2026-10-03",
+     "claim_type": "property",
+     "estimated_amount": 12300,
+     "currency": "USD",
+     "injury_reported": false,
+     "summary": "Hail damage to roof and skylights, family of three affected: 👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧....",
+     "urgency": "high"
+    },
+    "attempts": 2
+   },
+   "note": "Summary of 505 code points, then exactly 500 (3b: code points, so one family emoji = 5 characters): fails, then passes at the limit (far more than 500 UTF-16 units).",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"PR-561203\", \"claimant_name\": \"Helga Brandt-Moreau\", \"incident_date\": \"2026-10-03\", \"claim_type\": \"property\", \"estimated_amount\": 12300, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hail damage to roof and skylights, family of three affected: 👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧....👨‍👩‍👧\", \"urgency\": \"high\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"PR-561203\", \"claimant_name\": \"Helga Brandt-Moreau\", \"incident_date\": \"2026-10-03\", \"claim_type\": \"property\", \"estimated_amount\": 12300, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hail damage to roof and skylights, family of three affected: 👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧....\", \"urgency\": \"high\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB17",
+   "kind": "out_of_range",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: Re: Re: travel claim\n\nSorry for the late reply. Policy TR-330918 (Ana Lucia Ferreira).\nMy checked bag never arrived in Lisbon on 2026-09-28. Airline gave\na reference. Bought clothes and toiletries, receipts attached, total\nEUR 1.212,40 (one thousand two hundred twelve euro forty).\nNot urgent but would like it settled before end of month.\nThanks, Ana"
+   },
+   "expected": {
+    "status": [
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "policy_number": "TR-330918",
+     "claimant_name": "Ana Lucia Ferreira",
+     "incident_date": "2026-09-28",
+     "claim_type": "travel",
+     "estimated_amount": 1212.4,
+     "currency": "EUR\n",
+     "injury_reported": false,
+     "summary": "Checked bag lost on arrival in Lisbon; replacement purchases EUR 1,212.40 with receipts.",
+     "urgency": "low"
+    },
+    "attempts": 2
+   },
+   "note": "Pattern ^[A-Z]{3}$ with the reference's python semantics: 'EUR\\r\\n' fails, 'EUR\\n' passes ($ matches before one final newline). Data keeps the newline byte for byte.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"TR-330918\", \"claimant_name\": \"Ana Lucia Ferreira\", \"incident_date\": \"2026-09-28\", \"claim_type\": \"travel\", \"estimated_amount\": 1212.4, \"currency\": \"EUR\\r\\n\", \"injury_reported\": false, \"summary\": \"Checked bag lost on arrival in Lisbon; replacement purchases EUR 1,212.40 with receipts.\", \"urgency\": \"low\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"TR-330918\", \"claimant_name\": \"Ana Lucia Ferreira\", \"incident_date\": \"2026-09-28\", \"claim_type\": \"travel\", \"estimated_amount\": 1212.4, \"currency\": \"EUR\\n\", \"injury_reported\": false, \"summary\": \"Checked bag lost on arrival in Lisbon; replacement purchases EUR 1,212.40 with receipts.\", \"urgency\": \"low\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB18",
+   "kind": "schema_fields",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: claim\n\nhi my car got hit in parking lot while i was in the gym, they drove away,\npolicy AU-209384, my name is jordan reyes, happened yesterday 2026-10-16,\ndoor dented and mirror broke, shop says 950 bucks. no injuries"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Date not YYYY-MM-DD twice; the reviewer's correction has a summary of exactly 500 code points made mostly of emojis (more than 500 UTF-16 units): valid, so corrected and on_approved once with it.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"AU-209384\", \"claimant_name\": \"Jordan Reyes\", \"incident_date\": \"yesterday\", \"claim_type\": \"auto\", \"estimated_amount\": 950, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hit-and-run in a parking lot; door dented and mirror broken; shop estimate $950.\", \"urgency\": \"normal\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"AU-209384\", \"claimant_name\": \"Jordan Reyes\", \"incident_date\": \"16/10/2026\", \"claim_type\": \"auto\", \"estimated_amount\": 950, \"currency\": \"USD\", \"injury_reported\": false, \"summary\": \"Hit-and-run in a parking lot; door dented and mirror broken; shop estimate $950.\", \"urgency\": \"normal\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   },
+   "review_action": {
+    "action": "correct",
+    "data": {
+     "policy_number": "AU-209384",
+     "claimant_name": "Jordan Reyes",
+     "incident_date": "2026-10-16",
+     "claim_type": "auto",
+     "estimated_amount": 950,
+     "currency": "USD",
+     "injury_reported": false,
+     "summary": "Hit-and-run in the gym parking lot 🚗💥: driver door dented, mirror broken, shop estimate $950. No injuries. 📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷📷",
+     "urgency": "normal"
+    }
+   }
+  },
+  {
+   "id": "RB19",
+   "kind": "out_of_range",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "Hi, I was charged twice for my October subscription (order #A-55821),\nboth on 10/01. Please refund one of them. Thanks, Priya"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Category 'payments' (not allowed) twice; reject is sent twice: the first rejects, the second is refused, no on_approved call.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"payments\", \"priority\": \"normal\", \"language\": \"en\", \"sentiment\": -0.3, \"needs_human\": false, \"summary\": \"Charged twice for October subscription; wants one charge refunded.\", \"tags\": [\"double-charge\", \"refund\"]}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"payments\", \"priority\": \"normal\", \"language\": \"en\", \"sentiment\": -0.3, \"needs_human\": false, \"summary\": \"Charged twice for October subscription; wants one charge refunded.\", \"tags\": [\"double-charge\", \"refund\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   },
+   "review_action": {
+    "action": "reject",
+    "repeat": 2
+   }
+  },
+  {
+   "id": "RB20",
+   "kind": "out_of_range",
+   "step": "lead_score",
+   "source": "simulated",
+   "input": {
+    "text": "Name: Sam, sam@studio-kite.example.com\nMessage: just exploring options, no budget yet, 6 person design studio"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "company_size '6' twice; the reviewer sends an invalid correction (fit_score 22.5) twice: both refused, item stays pending, no on_approved call.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"industry\": \"Design\", \"company_size\": \"6\", \"fit_score\": 22, \"confidence\": 0.7, \"reason\": \"Very small studio, no budget, only exploring.\", \"signals\": [], \"red_flags\": [\"no budget\"], \"manipulation_attempt\": false}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"industry\": \"Design\", \"company_size\": \"6\", \"fit_score\": 22, \"confidence\": 0.7, \"reason\": \"Very small studio, no budget, only exploring.\", \"signals\": [], \"red_flags\": [\"no budget\"], \"manipulation_attempt\": false}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   },
+   "review_action": {
+    "action": "correct",
+    "data": {
+     "industry": "Design",
+     "company_size": "1-9",
+     "fit_score": 22.5,
+     "confidence": 0.7,
+     "reason": "Very small studio, no budget, only exploring.",
+     "signals": [],
+     "red_flags": [
+      "no budget"
+     ],
+     "manipulation_attempt": false
+    },
+    "repeat": 2
+   }
+  },
+  {
+   "id": "RB21",
+   "kind": "empty_refusal",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: FW: claim - rear ended on I-35\n\nHi team,\nforwarding from our customer below. Policy AU-482913.\n\n---------- Forwarded message ---------\nFrom: Dana Whitfield <dana.whitfield@mailbox.example.com>\nSent: Monday, October 12, 2026 7:42 AM\n\nHello, I was rear ended at a red light on Oct 9th around 5pm. Other driver\nadmitted it. Back bumper and trunk are smashed, the body shop said around\n$3,400 to fix. No one was hurt but my neck is a bit stiff, not seeing a doctor\nfor now. What do I need to send you??\n\nDana Whitfield\nSent from my iPhone"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Both answers pass the schema but stopped abnormally (max_tokens, refusal): no answer passed every check, so approve is refused, the item stays pending, no on_approved call (3b rule 8).",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "max_tokens",
+     "text": "{\"policy_number\": \"AU-482913\", \"claimant_name\": \"Dana Whitfield\", \"incident_date\": \"2026-10-09\", \"claim_type\": \"auto\", \"estimated_amount\": 3400, \"currency\": \"USD\", \"injury_reported\": true, \"summary\": \"Rear-ended at a red light; bumper and trunk damaged, about $3,400. Mild neck stiffness, no doctor yet.\", \"urgency\": \"normal\"}"
+    },
+    {
+     "http": 200,
+     "stop_reason": "refusal",
+     "text": "{\"policy_number\": \"AU-482913\", \"claimant_name\": \"Dana Whitfield\", \"incident_date\": \"2026-10-09\", \"claim_type\": \"auto\", \"estimated_amount\": 3400, \"currency\": \"USD\", \"injury_reported\": true, \"summary\": \"Rear-ended at a red light; bumper and trunk damaged, about $3,400. Mild neck stiffness, no doctor yet.\", \"urgency\": \"normal\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   },
+   "review_action": {
+    "action": "approve"
+   }
+  },
+  {
+   "id": "RB22",
+   "kind": "setup",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: slip and fall at our store\n\nPolicy LI-775120 - Brightwater Hardware LLC.\nA customer slipped on a wet floor near aisle 4 on 10/02/2026 (October 2nd)\nand broke her wrist, ambulance came. Her lawyer sent a letter today. No amount\nyet. Our store manager Pete Lindqvist is the contact."
+   },
+   "expected": {
+    "status": [
+     "failed"
+    ],
+    "alert": true,
+    "review_row": false,
+    "data": null,
+    "attempts": 0
+   },
+   "note": "Default fallback whose date 2100-02-29 does not exist (2100 is not a leap year): setup failed, alert, the AI step is not called.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy_number\": \"LI-775120\", \"claimant_name\": \"Brightwater Hardware LLC\", \"incident_date\": \"2026-10-02\", \"claim_type\": \"liability\", \"estimated_amount\": null, \"currency\": \"USD\", \"injury_reported\": true, \"summary\": \"Customer slipped on a wet floor and broke her wrist; lawyer letter received; no amount yet.\", \"urgency\": \"high\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "default",
+    "value": {
+     "policy_number": "LI-775120",
+     "claimant_name": "Brightwater Hardware LLC",
+     "incident_date": "2100-02-29",
+     "claim_type": "liability",
+     "estimated_amount": null,
+     "currency": "USD",
+     "injury_reported": true,
+     "summary": "Customer slipped on a wet floor and broke her wrist; lawyer letter received; no amount yet.",
+     "urgency": "high"
+    }
+   },
+   "options": {
+    "setup_problem": "fallback_invalid"
+   }
+  },
+  {
+   "id": "RB23",
+   "kind": "api_error",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "THE APP KEEPS CRASHING WHEN I OPEN THE INVOICES TAB!!! since the update\nyesterday. iphone 15, ios 19. i have a client meeting in 1 hour and need\nthose invoices NOW"
+   },
+   "expected": {
+    "status": [
+     "fallback"
+    ],
+    "alert": true,
+    "review_row": false,
+    "data": {
+     "category": "other",
+     "priority": "normal",
+     "language": "en",
+     "sentiment": -0.0,
+     "needs_human": true,
+     "summary": "Automatic triage unavailable; a person should read this ticket.",
+     "tags": [
+      "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥",
+      "needs-person"
+     ]
+    },
+    "attempts": 2
+   },
+   "note": "503, then a bad answer; the default value has a tag of exactly 30 emojis (60 UTF-16 units) and sentiment -0.0: it passes the setup check and is returned exactly.",
+   "mock": [
+    {
+     "http": 503
+    },
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"technical\", \"priority\": \"urgent\", \"language\": \"en\", \"sentiment\": \"very negative\", \"needs_human\": true, \"summary\": \"App crashes on the invoices tab since yesterday's update (iPhone 15, iOS 19).\", \"tags\": [\"crash\", \"ios\", \"invoices\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "default",
+    "value": {
+     "category": "other",
+     "priority": "normal",
+     "language": "en",
+     "sentiment": -0.0,
+     "needs_human": true,
+     "summary": "Automatic triage unavailable; a person should read this ticket.",
+     "tags": [
+      "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥",
+      "needs-person"
+     ]
+    }
+   }
+  },
+  {
+   "id": "RB24",
+   "kind": "api_error",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: Water damage - URGENT\n\nPolicy number: PR-100457\nName: Marcus Oyelaran\n\nPipe burst in the upstairs bathroom last night (2026-10-14). Water came\nthrough the kitchen ceiling, ceiling partly down, floor soaked. Plumber\nalready came. Contractor quote for ceiling + floor is $18,750.00. Nobody\ninjured. We have a newborn and can't stay in the house, please call me\nasap 555-0142."
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": true,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Per-call timeout 100 s and no answers: try 2 gets only the time left, the second AI step gets what is left (nothing), and the guard must return within 170 s (the scorer counts over 180 s as a crash).",
+   "mock": [
+    {
+     "delay_seconds": 110
+    },
+    {
+     "delay_seconds": 110
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "delay_seconds": 30
+     }
+    ]
+   },
+   "options": {
+    "timeout_seconds": 100
+   }
+  },
+  {
+   "id": "RB25",
+   "kind": "api_error",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "Hi, I was charged twice for my October subscription (order #A-55821),\nboth on 10/01. Please refund one of them. Thanks, Priya"
+   },
+   "expected": {
+    "status": [
+     "needs_review"
+    ],
+    "alert": false,
+    "review_row": true,
+    "data": null,
+    "attempts": 2
+   },
+   "note": "Bad answer, then 500 on the retry, then the second AI step gives a bad answer: the last call is a bad answer and no call was a 4xx, so needs_review with NO alert.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"billing\", \"priority\": \"high\", \"language\": \"en\", \"sentiment\": -0.3, \"needs_human\": false, \"summary\": \"Charged twice for October subscription; wants one charge refunded.\", \"tags\": [\"double-charge\", \"refund\"]}"
+    },
+    {
+     "http": 500
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "http": 200,
+      "stop_reason": "end_turn",
+      "text": "{\"category\": \"billing\", \"priority\": \"normal\", \"language\": \"en\", \"sentiment\": -0.3, \"needs_human\": false, \"summary\": \"Charged twice for October subscription; wants one charge refunded.\", \"tags\": \"refund\"}"
+     }
+    ]
+   }
+  },
+  {
+   "id": "RB26",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "simulated",
+   "input": {
+    "text": "Subject: FW: claim - rear ended on I-35\n\nHi team,\nforwarding from our customer below. Policy AU-482913.\n\n---------- Forwarded message ---------\nFrom: Dana Whitfield <dana.whitfield@mailbox.example.com>\nSent: Monday, October 12, 2026 7:42 AM\n\nHello, I was rear ended at a red light on Oct 9th around 5pm. Other driver\nadmitted it. Back bumper and trunk are smashed, the body shop said around\n$3,400 to fix. No one was hurt but my neck is a bit stiff, not seeing a doctor\nfor now. What do I need to send you??\n\nDana Whitfield\nSent from my iPhone"
+   },
+   "expected": {
+    "status": [
+     "ok"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": {
+     "policy_number": "AU-482913",
+     "claimant_name": "Dana Whitfield",
+     "incident_date": "2026-10-09",
+     "claim_type": "auto",
+     "estimated_amount": 3400,
+     "currency": "USD",
+     "injury_reported": true,
+     "summary": "Rear-ended at a red light 🚗; bumper and trunk damaged (body shop 1/2 day), mild neck stiffness. No doctor yet.",
+     "urgency": "normal"
+    },
+    "attempts": 1
+   },
+   "note": "Unicode escapes in a key (policy\\u005fnumber) and values (\\u0061uto, a surrogate-pair car emoji, \\/ and \\u2028): valid after parsing; data equals the parsed answer exactly.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"policy\\u005fnumber\": \"AU-482913\", \"claimant_name\": \"Dana Whitfield\", \"incident_date\": \"2026-10-09\", \"claim_type\": \"\\u0061uto\", \"estimated_amount\": 3400, \"currency\": \"USD\", \"injury_reported\": true, \"summary\": \"Rear-ended at a red light \\ud83d\\ude97; bumper and trunk damaged (body shop 1\\/2 day), mild neck stiffness.\\u2028No doctor yet.\", \"urgency\": \"normal\"}"
+    }
+   ],
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "RB27",
+   "kind": "setup",
+   "step": "ticket_triage",
+   "source": "simulated",
+   "input": {
+    "text": "hello how do i change the email on my account, the old one is from my\nprevious job and i cant log in there anymore"
+   },
+   "expected": {
+    "status": [
+     "failed"
+    ],
+    "alert": true,
+    "review_row": false,
+    "data": null,
+    "attempts": 0
+   },
+   "note": "No schema, with a second AI step configured: setup failed, alert; neither AI step is called.",
+   "mock": [
+    {
+     "http": 200,
+     "stop_reason": "end_turn",
+     "text": "{\"category\": \"account\", \"priority\": \"low\", \"language\": \"en\", \"sentiment\": 0.0, \"needs_human\": false, \"summary\": \"Customer wants to change the account e-mail; no access to the old one.\", \"tags\": [\"email-change\", \"login\"]}"
+    }
+   ],
+   "fallback": {
+    "mode": "second_step",
+    "mock": [
+     {
+      "http": 200,
+      "stop_reason": "end_turn",
+      "text": "{\"category\": \"account\", \"priority\": \"low\", \"language\": \"en\", \"sentiment\": 0.0, \"needs_human\": false, \"summary\": \"Customer wants to change the account e-mail; no access to the old one.\", \"tags\": [\"email-change\", \"login\"]}"
+     }
+    ]
+   },
+   "options": {
+    "setup_problem": "schema_missing"
+   }
+  }
+ ]
+}

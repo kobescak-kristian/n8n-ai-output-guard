@@ -124,7 +124,8 @@ function schemaProblems(s, p, top) {
 // the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)
 function cleanParse(text) {
   if (text === null || text === undefined) return { ok: false, why: 'empty answer' };
-  const t = String(text).trim();
+  // trim exactly what python str.strip() trims (the reference): a byte-order mark is NOT white space
+  const t = String(text).replace(/^[\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g, '');
   if (!t) return { ok: false, why: 'empty answer' };
   try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
@@ -152,10 +153,19 @@ function classify(r) {
   return { kind: 'answer', http: 200 };
 }
 
+// retry-after in seconds (any size) or as an HTTP date; missing or unreadable: 1 s; never more than 20 s
+function retryAfterSeconds(v) {
+  if (v === undefined || v === null || String(v).trim() === '') return 1;
+  const t = String(v).trim();
+  let secs = /^\d+(?:\.\d+)?$/.test(t) ? Number(t) : NaN;
+  if (Number.isNaN(secs)) { const d = Date.parse(t); if (!Number.isNaN(d)) secs = (d - Date.now()) / 1000; }
+  if (Number.isNaN(secs)) return 1;
+  return Math.min(Math.max(secs, 0), 20);
+}
+
 function apiKind(code, retryAfter) {
   if (code === 429) {
-    const ra = Number(retryAfter);
-    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,
+    return { kind: 'api', http: code, retry: true, wait: retryAfterSeconds(retryAfter),
       retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };
   }
   if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };
@@ -200,7 +210,7 @@ function fallbackNext(S) {
 
 function timeoutMs(S, waitSeconds) {
   const per = 1000 * (Number(S.options.timeout_seconds) || 60);
-  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);
+  const left = 160000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);
   return Math.max(1000, Math.min(per, left));
 }
 
@@ -330,6 +340,7 @@ return [{ json: S }];
 """
 
 DECIDE = r"""
+const cut = (x, n) => { const a = [...String(x === undefined || x === null ? '' : x)]; return a.length > n ? a.slice(0, n).join('') : a.join(''); };
 const S = $input.first().json;
 const last = S.calls[S.calls.length - 1];
 const apiFail = (c) => !!c && (c.kind === 'api' || c.kind === 'transport');
@@ -347,27 +358,28 @@ else if (status === 'needs_review') alert = apiFail(last) || any4xx || !!S.class
 S.final = { status, data, source, reason, alert, review: status === 'needs_review' };
 S.review_id = S.final.review ? 'R-' + S.call_id : '';
 const lastMain = S.calls.filter((c) => c.role === 'main').slice(-1)[0] || {};
-const ans = lastMain.raw === undefined || lastMain.raw === null ? '(no answer)' : String(lastMain.raw).slice(0, 400);
+const ans = lastMain.raw === undefined || lastMain.raw === null ? '(no answer)' : cut(lastMain.raw, 400);
 S.review_text = `:mag: *AI answer needs a person* (${S.task || 'AI step'})
-*Why:* ${reason.slice(0, 500)}
-*Input:* ${String(JSON.stringify(S.ai_input === undefined ? null : S.ai_input)).slice(0, 300)}
+*Why:* ${cut(reason, 500)}
+*Input:* ${cut(JSON.stringify(S.ai_input === undefined ? null : S.ai_input), 300)}
 *Last AI answer:* ${ans}
 *Review:* __BASE__/webhook/q119-review?id=${S.review_id}`;
 S.alert_text = `:rotating_light: *AI output guard alert* (${S.task || 'AI step'})
 *Status:* ${status}
-*Reason:* ${reason.slice(0, 500)}
-*Errors:* ${S.errors.slice(-3).join(' | ').slice(0, 500)}
+*Reason:* ${cut(reason, 500)}
+*Errors:* ${cut(S.errors.slice(-3).join(' | '), 500)}
 *Call:* ${S.call_id}`;
 return [{ json: S }];
 """
 
 QUEUE_ROW = r"""
+const cut = (x, n) => { const a = [...String(x === undefined || x === null ? '' : x)]; return a.length > n ? a.slice(0, n).join('') : a.join(''); };
 const S = $input.first().json;
 const raws = S.calls.filter((c) => c.role === 'main').map((c) => (c.raw === undefined ? null : c.raw));
-const excerpt = String(JSON.stringify(S.ai_input === undefined ? null : S.ai_input)).slice(0, 600);
+const excerpt = cut(JSON.stringify(S.ai_input === undefined ? null : S.ai_input), 600);
 return [{ json: {
   review_id: S.review_id, call_id: S.call_id, case_id: String(S.meta.case_id || ''), run_label: String(S.meta.run_label || ''),
-  task: S.task, status: 'pending', reason: S.final.reason.slice(0, 900), input_excerpt: excerpt,
+  task: S.task, status: 'pending', reason: cut(S.final.reason, 900), input_excerpt: excerpt,
   answers: JSON.stringify(raws), passed_answer: S.passed === null ? '' : JSON.stringify(S.passed),
   schema: JSON.stringify(S.schema), on_approved_id: String(S.on_approved_id || ''), created_at: new Date().toISOString(),
   decided_at: '', decision: '', final_data: '', decision_note: '',
@@ -375,21 +387,23 @@ return [{ json: {
 """
 
 AFTER_REVIEW = r"""
+const cut = (x, n) => { const a = [...String(x === undefined || x === null ? '' : x)]; return a.length > n ? a.slice(0, n).join('') : a.join(''); };
 const S = $('Decide').first().json;
 const q = $('Add to review queue').first().json || {};
 const s = $input.first().json || {};
 S.queue_row_id = q.id === undefined ? null : q.id;
-S.queue_error = q.error ? String(q.error.message || q.error).slice(0, 300) : '';
+S.queue_error = q.error ? cut(q.error.message || q.error, 300) : '';
 S.review_ts = s.ts || (s.message && s.message.ts) || '';
-S.review_slack_error = S.review_ts ? '' : String((s.error && (s.error.message || s.error)) || 'no message ts').slice(0, 300);
+S.review_slack_error = S.review_ts ? '' : cut((s.error && (s.error.message || s.error)) || 'no message ts', 300);
 return [{ json: S }];
 """
 
 AFTER_ALERT = r"""
+const cut = (x, n) => { const a = [...String(x === undefined || x === null ? '' : x)]; return a.length > n ? a.slice(0, n).join('') : a.join(''); };
 const S = $('Alert?').first().json;
 const s = $input.first().json || {};
 S.alert_ts = s.ts || (s.message && s.message.ts) || '';
-S.alert_error = S.alert_ts ? '' : String((s.error && (s.error.message || s.error)) || 'no message ts').slice(0, 300);
+S.alert_error = S.alert_ts ? '' : cut((s.error && (s.error.message || s.error)) || 'no message ts', 300);
 return [{ json: S }];
 """
 
@@ -401,6 +415,7 @@ return [{ json: S }];
 """
 
 LOG_ROW = r"""
+const cut = (x, n) => { const a = [...String(x === undefined || x === null ? '' : x)]; return a.length > n ? a.slice(0, n).join('') : a.join(''); };
 const S = $input.first().json;
 const calls = S.calls.map((c) => { const x = Object.assign({}, c); delete x.value; return x; });
 const sum = (k) => S.calls.reduce((a, c) => a + (Number(c[k]) || 0), 0);
@@ -412,7 +427,7 @@ return [{ json: {
   alert_wanted: !!S.final.alert, alert_ts: S.alert_ts || '', alert_error: S.alert_error || '',
   review_id: S.review_id || '', review_ts: S.review_ts || '', review_error: S.review_slack_error || S.queue_error || '',
   started_at: S.started_at, seconds: S.seconds, model, tokens_in: sum('tokens_in'), tokens_out: sum('tokens_out'),
-  data: S.final.data === null ? '' : JSON.stringify(S.final.data), source: S.final.source || '', reason: S.final.reason.slice(0, 900),
+  data: S.final.data === null ? '' : JSON.stringify(S.final.data), source: S.final.source || '', reason: cut(S.final.reason, 900),
 } }];
 """
 
@@ -440,7 +455,7 @@ const status = Number(r.statusCode);
 const h = r.headers || {};
 const ra = h['retry-after'] !== undefined ? h['retry-after'] : null;
 if (status !== 200) {
-  return [{ json: { http_status: status, retry_after: ra === null ? null : Number(ra), error_message: JSON.stringify(r.body || '').slice(0, 300) } }];
+  return [{ json: { http_status: status, retry_after: ra === null ? null : String(ra), error_message: JSON.stringify(r.body || '').slice(0, 300) } }];
 }
 const b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {});
 const blocks = Array.isArray(b.content) ? b.content : [];
