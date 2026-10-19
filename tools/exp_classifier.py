@@ -45,9 +45,9 @@ def workflow():
                                                          "responseMode": "responseNode", "options": {}}, 0,
              webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, "q119/q119-exp-classify"))),
         node("Items", "n8n-nodes-base.code", 2, {"jsCode": "const b = $input.first().json.body || {};\n"
-             "return (b.texts || []).map((t, i) => ({ json: { i, body: { model: b.model, max_tokens: 1024, system: "
+             "return (b.texts || []).map((t, i) => ({ json: { i, body: { model: b.model, max_tokens: 1024, system: b.system || "
              + json.dumps(PROMPT) + ", messages: [{ role: 'user', content: 'Text to screen:\\n<<<\\n' + t + '\\n>>>' }], "
-             "output_config: { effort: 'low' } } } }));\n"}, 1),
+             "output_config: { effort: b.effort || 'low' } } } }));\n"}, 1),
         node("Ask Claude", "n8n-nodes-base.httpRequest", 4.2, {
             "method": "POST", "url": "https://api.anthropic.com/v1/messages", "authentication": "predefinedCredentialType",
             "nodeCredentialType": "anthropicApi", "sendHeaders": True,
