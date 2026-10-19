@@ -275,7 +275,7 @@ READ_INJ = r"""
 const S = $('Prepare injection check').first().json.state;
 const r = $input.first().json || {};
 const v = String(r.verdict || '').toLowerCase();
-S.ai_injection_check = { verdict: v || 'error', model: r.model || '', tokens_in: r.tokens_in || 0, tokens_out: r.tokens_out || 0 };
+S.ai_injection_check = { verdict: v || 'error', tries: r.tries || 1, model: r.model || '', tokens_in: r.tokens_in || 0, tokens_out: r.tokens_out || 0 };
 if (v === 'yes') { S.injection = true; S.injection_hits = S.injection_hits.concat(['AI injection check']); }
 else if (v !== 'no') {
   S.injection = true; S.classifier_error = true;
@@ -543,16 +543,36 @@ return [{ json: { timeout_ms: (it.options || {}).timeout_ms || 30000, body: { mo
 """
 
 INJ_NORMALIZE = r"""
+// try __TRY__ of at most 2. An API error that a retry can fix (timeout, closed connection, HTTP 408, 429, 5xx)
+// on try 1 asks for one retry (owner decision 15); any other error, or an error on try 2, is final.
+const TRY = __TRY__;
 const r = $input.first().json || {};
-if (r.statusCode === undefined) return [{ json: { verdict: 'error', error_message: String((r.error && r.error.message) || r.error || 'no response').slice(0, 200) } }];
-if (Number(r.statusCode) !== 200) return [{ json: { verdict: 'error', error_message: 'HTTP ' + r.statusCode } }];
-const b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {});
+const h = r.headers || {};
+function waitSeconds(v) {  // retry-after in seconds or as an HTTP date; missing or unreadable: 1 s; at most 10 s
+  if (v === undefined || v === null || String(v).trim() === '') return 1;
+  const t = String(v).trim();
+  let secs = /^\+?\d+(?:\.\d+)?(?:e\+?\d+)?$/i.test(t) ? Number(t) : NaN;
+  if (Number.isNaN(secs)) { const d = Date.parse(t); if (!Number.isNaN(d)) secs = (d - Date.now()) / 1000; }
+  if (Number.isNaN(secs)) return 1;
+  return Math.min(Math.max(secs, 0), 10);
+}
+function apiError(message, retryable, wait) {
+  const retry = retryable && TRY === 1;
+  return [{ json: { verdict: 'error', tries: TRY, retry, wait: retry ? wait : 0, error_message: String(message).slice(0, 200) } }];
+}
+if (r.statusCode === undefined) return apiError((r.error && r.error.message) || r.error || 'no response', true, 1);
+const code = Number(r.statusCode);
+if (code !== 200) return apiError('HTTP ' + r.statusCode, code === 408 || code === 429 || code >= 500,
+  code === 429 ? waitSeconds(h['retry-after']) : 1);
+let b = {};
+try { b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {}); } catch (e) { b = {}; }
 const text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();
 // clear answer = YES or NO as a whole word, and only one of the two in the answer; an answer with both,
-// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002)
+// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002); not retried
 const found = new Set([...text.matchAll(/(?<![A-Z])(YES|NO)(?![A-Z])/g)].map((x) => x[1]));
 const verdict = found.size === 1 ? [...found][0].toLowerCase() : 'error';
-return [{ json: { verdict, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0, tokens_out: (b.usage || {}).output_tokens || 0,
+return [{ json: { verdict, tries: TRY, retry: false, wait: 0, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0,
+  tokens_out: (b.usage || {}).output_tokens || 0,
   error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];
 """
 

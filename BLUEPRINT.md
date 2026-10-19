@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.6, 2026-10-19
+- Version: v1.7, 2026-10-19
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -110,8 +110,8 @@ Eval level: Decided Critical, owner, 2026-10-19
 - Default Critical safeguard "human approval before each write" would remove the point of the guard; replaced by the code checks above, anything not checked goes to a person. The trigger cases still run.
 - `Safeguard removed: human approval before each checked result is returned to the caller, owner, 2026-10-19`
 - **Gate v2 (owner decision 2026-10-19, option A; v1 at 893fec5 stays in git history, no result seen yet).** Change from v1: v1 has `status_accuracy >= 0.90` over all cases; the skill now says code checks are 100% and a % claim only on LLM output, sized from the table.
-  - Code checks, 100% (a miss is a bug): expected status on every gated case that is not a rate case (simulated cases give the same input every time, and the injection and stop-reason checks are code); untouched data; validator agreement; retry rules; log rows; alerts; simulated cases identical over the 3 runs. Same thresholds as v1 for every other metric.
-  - Rate claim: only the live `correct` cases depend on what Claude writes (the 4 live injection cases and MJ07 are decided by code checks, so they are trigger and code cases). Today: 5 visible + at least 3 hold-out = too few (the table needs 14 for 80% with 0 misses).
+  - Code checks, 100% (a miss is a bug): expected status on every gated case that is not a rate case (simulated cases give the same input every time, and the stop-reason check is code; since decision 14 the injection screen is the code check OR an AI check, so on simulated cases it also makes a live AI call, see decision 15); untouched data; validator agreement; retry rules; log rows; alerts; simulated cases identical over the 3 runs. Same thresholds as v1 for every other metric.
+  - Rate claim: only the live `correct` cases depend on what Claude writes (the 4 live injection cases and MJ07 are decided by the injection screen and code checks, not by what the AI step writes, so they are trigger and code cases). Today: 5 visible + at least 3 hold-out = too few (the table needs 14 for 80% with 0 misses).
   - **Decided (option A):** add 25 live `correct` cases to the visible set before the first run (allowed; no case edited or removed), across the 3 steps, messy real-world inputs. Claim: at least 80% of rate cases pass, at most 2 misses, at least 30 rate cases (table row 80%, 2 misses). Pass = status in expected.status in all 3 runs. Why 80%: a rate miss sends a normal item to a person (rework, not harm), because harmful outcomes are critical failures counted apart; the guard's selling point is the code checks, not Claude's format rate. 2 misses: the skill default; 0 at this size fails good builds often. Expected quality is higher; the claim is what the cases can prove. New cases accept ok or ok_after_retry (like the hold-out live cases); the 7 visible correct cases keep ok only (frozen).
   - Rejected: option B (9 more cases, 80% with 0 misses; 0 misses fails good builds often) and option C (no % claim).
   - Totals after v2: 79 visible + 31 hold-out = 110 cases (hold-out share 28%); 37 correct cases; at least 33 rate cases (30 visible + at least 3 hold-out).
@@ -155,6 +155,7 @@ Locked (owner, 2026-10-18 plan approval; change only by a dated line in 8.):
 13. Second sealed hold-out batch (owner, 2026-10-19): the visible additions of v2, v3 and the code red team lowered the hold-out share to 31 of 158 (20%), against about 30%; about 35 more hold-out cases are written by a separate session that never builds, from tests/CASES.md with section 3b and tests/schemas/ only, sealed as a second archive with its own committed SHA-256 commitment before any gated run (target: 66 of 193, about 34%). Both batches are opened only at the gated runs. Rejected: accepting 20% (weaker blind test), dropping visible cases (frozen).
 
 14. Injection screening = code check OR AI injection check (owner, 2026-10-19; decision note q119-decision-injection-check.md; ADR-002). Fresh-text evidence: code check v5 alone missed 13 of 100 typical attacks; the Claude Haiku 5.5 check missed 0 of 100 and flagged 0 of 100 normal texts, identical over 3 runs; with the check switched on, visible-A1 was clean (138 of 138). Either one flags -> needs_review; AI check error -> needs_review with an alert (fail-closed). On by default in the demo callers and runners; documented as best effort in the README. Rejected: code only (about 70% chance of a CF2 FAIL on the first gated run), more word-list rounds (no convergence on fresh texts).
+15. The AI injection check retries once (owner, 2026-10-19 evening, after the R4 checkpoint review): on an API error that a retry can fix (timeout, closed connection, HTTP 408, 429 or 5xx) it waits 1 s (on a 429 the retry-after time, at most 10 s) and asks once more; if the retry fails too, or on any other error, or on an answer that is not clear (exactly one of YES or NO), the item goes to review with an alert (fail-closed, ADR-002). An unclear answer is not retried. A failure that is left after the retry stays a failure of the automation in a run (needs_review + alert; gate v4), not an INVALID RUN. Why: about 700 AI-check calls in the gated series, one gated attempt (decision 9); without a retry one passing API error would fail the series. Wiring checked with tools/probe_inj_retry.py (8 scenarios against a local fake API). Rejected: no retry (option B); counting an AI-check error as an invalid run (option C, would loosen the gate). The owner also accepts every further safety net the build proposes.
 
 Open:
 - n8n slot: free now; Q-117 resumes 2026-10-20 08:00 and Q-119 pauses then until the owner hands n8n back — owner.
@@ -178,6 +179,7 @@ Builder work (no decision needed): about 25 new visible cases from R1 findings 2
 
 ## 8. Version log
 
+- v1.7 2026-10-19: owner decision 15: the AI injection check retries once on an API error; section 5 wording updated to decision 14.
 - v1.6 2026-10-19: owner decision 14: code check + AI injection check (option A); ADR-002.
 - v1.5 2026-10-19: owner decision: second sealed hold-out batch of about 35 cases (decision 13).
 - v1.4 2026-10-19: owner decision: red team after every build phase (decision 12).

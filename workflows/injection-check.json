@@ -86,7 +86,146 @@
     0
    ],
    "parameters": {
-    "jsCode": "const r = $input.first().json || {};\nif (r.statusCode === undefined) return [{ json: { verdict: 'error', error_message: String((r.error && r.error.message) || r.error || 'no response').slice(0, 200) } }];\nif (Number(r.statusCode) !== 200) return [{ json: { verdict: 'error', error_message: 'HTTP ' + r.statusCode } }];\nconst b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {});\nconst text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();\n// clear answer = YES or NO as a whole word, and only one of the two in the answer; an answer with both,\n// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002)\nconst found = new Set([...text.matchAll(/(?<![A-Z])(YES|NO)(?![A-Z])/g)].map((x) => x[1]));\nconst verdict = found.size === 1 ? [...found][0].toLowerCase() : 'error';\nreturn [{ json: { verdict, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0, tokens_out: (b.usage || {}).output_tokens || 0,\n  error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];\n"
+    "jsCode": "// try 1 of at most 2. An API error that a retry can fix (timeout, closed connection, HTTP 408, 429, 5xx)\n// on try 1 asks for one retry (owner decision 15); any other error, or an error on try 2, is final.\nconst TRY = 1;\nconst r = $input.first().json || {};\nconst h = r.headers || {};\nfunction waitSeconds(v) {  // retry-after in seconds or as an HTTP date; missing or unreadable: 1 s; at most 10 s\n  if (v === undefined || v === null || String(v).trim() === '') return 1;\n  const t = String(v).trim();\n  let secs = /^\\+?\\d+(?:\\.\\d+)?(?:e\\+?\\d+)?$/i.test(t) ? Number(t) : NaN;\n  if (Number.isNaN(secs)) { const d = Date.parse(t); if (!Number.isNaN(d)) secs = (d - Date.now()) / 1000; }\n  if (Number.isNaN(secs)) return 1;\n  return Math.min(Math.max(secs, 0), 10);\n}\nfunction apiError(message, retryable, wait) {\n  const retry = retryable && TRY === 1;\n  return [{ json: { verdict: 'error', tries: TRY, retry, wait: retry ? wait : 0, error_message: String(message).slice(0, 200) } }];\n}\nif (r.statusCode === undefined) return apiError((r.error && r.error.message) || r.error || 'no response', true, 1);\nconst code = Number(r.statusCode);\nif (code !== 200) return apiError('HTTP ' + r.statusCode, code === 408 || code === 429 || code >= 500,\n  code === 429 ? waitSeconds(h['retry-after']) : 1);\nlet b = {};\ntry { b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {}); } catch (e) { b = {}; }\nconst text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();\n// clear answer = YES or NO as a whole word, and only one of the two in the answer; an answer with both,\n// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002); not retried\nconst found = new Set([...text.matchAll(/(?<![A-Z])(YES|NO)(?![A-Z])/g)].map((x) => x[1]));\nconst verdict = found.size === 1 ? [...found][0].toLowerCase() : 'error';\nreturn [{ json: { verdict, tries: TRY, retry: false, wait: 0, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0,\n  tokens_out: (b.usage || {}).output_tokens || 0,\n  error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];\n"
+   }
+  },
+  {
+   "id": "652578a8-087b-574b-bf46-86df4b31e012",
+   "name": "Retry AI check?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "652578a8-087b-574b-bf46-86df4b31e012",
+       "leftValue": "={{ $json.retry === true }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "bb6471a6-4e08-50a2-b279-28118959995f",
+   "name": "Wait before retry",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    1300,
+    180
+   ],
+   "parameters": {
+    "resume": "timeInterval",
+    "amount": "={{ $json.wait }}",
+    "unit": "seconds"
+   },
+   "webhookId": "97f76151-9144-5cb0-850d-5f1697fcb628"
+  },
+  {
+   "id": "19df0257-cf06-5836-805e-fa225a7e3e0e",
+   "name": "Retry request",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    180
+   ],
+   "parameters": {
+    "jsCode": "return [{ json: $('Build request').first().json }];\n"
+   }
+  },
+  {
+   "id": "beae57c5-578f-5fec-8107-89658800a62d",
+   "name": "Ask Claude (retry)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1820,
+    180
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": "={{ $json.timeout_ms }}",
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true,
+       "responseFormat": "json"
+      }
+     }
+    },
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "anthropicApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "anthropic-version",
+       "value": "2023-06-01"
+      },
+      {
+       "name": "anthropic-beta",
+       "value": "server-side-fallback-2026-07-01"
+      }
+     ]
+    }
+   },
+   "credentials": {
+    "anthropicApi": {
+     "id": "__CRED:anthropicApi__",
+     "name": "Anthropic n8n-output-guard"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "6db6a97e-df87-548e-87f4-0efa0676d0a5",
+   "name": "Verdict (retry)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2080,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// try 2 of at most 2. An API error that a retry can fix (timeout, closed connection, HTTP 408, 429, 5xx)\n// on try 1 asks for one retry (owner decision 15); any other error, or an error on try 2, is final.\nconst TRY = 2;\nconst r = $input.first().json || {};\nconst h = r.headers || {};\nfunction waitSeconds(v) {  // retry-after in seconds or as an HTTP date; missing or unreadable: 1 s; at most 10 s\n  if (v === undefined || v === null || String(v).trim() === '') return 1;\n  const t = String(v).trim();\n  let secs = /^\\+?\\d+(?:\\.\\d+)?(?:e\\+?\\d+)?$/i.test(t) ? Number(t) : NaN;\n  if (Number.isNaN(secs)) { const d = Date.parse(t); if (!Number.isNaN(d)) secs = (d - Date.now()) / 1000; }\n  if (Number.isNaN(secs)) return 1;\n  return Math.min(Math.max(secs, 0), 10);\n}\nfunction apiError(message, retryable, wait) {\n  const retry = retryable && TRY === 1;\n  return [{ json: { verdict: 'error', tries: TRY, retry, wait: retry ? wait : 0, error_message: String(message).slice(0, 200) } }];\n}\nif (r.statusCode === undefined) return apiError((r.error && r.error.message) || r.error || 'no response', true, 1);\nconst code = Number(r.statusCode);\nif (code !== 200) return apiError('HTTP ' + r.statusCode, code === 408 || code === 429 || code >= 500,\n  code === 429 ? waitSeconds(h['retry-after']) : 1);\nlet b = {};\ntry { b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {}); } catch (e) { b = {}; }\nconst text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();\n// clear answer = YES or NO as a whole word, and only one of the two in the answer; an answer with both,\n// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002); not retried\nconst found = new Set([...text.matchAll(/(?<![A-Z])(YES|NO)(?![A-Z])/g)].map((x) => x[1]));\nconst verdict = found.size === 1 ? [...found][0].toLowerCase() : 'error';\nreturn [{ json: { verdict, tries: TRY, retry: false, wait: 0, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0,\n  tokens_out: (b.usage || {}).output_tokens || 0,\n  error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];\n"
+   }
+  },
+  {
+   "id": "94d51ccc-eb54-5dd4-a2f1-7afaecfed4d5",
+   "name": "Answer",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    -180
+   ],
+   "parameters": {
+    "jsCode": "return $input.all();\n"
    }
   }
  ],
@@ -118,6 +257,68 @@
     [
      {
       "node": "Verdict",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Verdict": {
+   "main": [
+    [
+     {
+      "node": "Retry AI check?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Retry AI check?": {
+   "main": [
+    [
+     {
+      "node": "Wait before retry",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Answer",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Wait before retry": {
+   "main": [
+    [
+     {
+      "node": "Retry request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Retry request": {
+   "main": [
+    [
+     {
+      "node": "Ask Claude (retry)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask Claude (retry)": {
+   "main": [
+    [
+     {
+      "node": "Verdict (retry)",
       "type": "main",
       "index": 0
      }

@@ -61,3 +61,4 @@ Starting points, not exhaustive reading lists.
 - Test cases consistent with the reference validator: `python tests/make_cases.py`
 - Test-set checks catch planted mistakes: `python tests/test_make_cases.py`
 - Workflow files regenerate: `python workflows/build.py`
+- AI injection check verdict and retry rules: `python tests/test_inj_verdict.py` (node)

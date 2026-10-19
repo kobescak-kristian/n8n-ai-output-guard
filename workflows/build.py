@@ -217,13 +217,25 @@ def build_live_step(task, label):
     return w
 
 
-def build_injection_check():
-    w = WF("injection-check", "Q119 Injection check: Claude Haiku 5.5")
+def build_injection_check(url="https://api.anthropic.com/v1/messages", key="injection-check",
+                          name="Q119 Injection check: Claude Haiku 5.5"):
+    # one retry on an API error a retry can fix (owner decision 15); the last node that runs gives the answer
+    w = WF(key, name)
     trigger(w)
     code(w, "Build request", J.INJ_REQUEST.replace("__PROMPT__", json.dumps(J.INJ_PROMPT)), 1)
-    http_messages(w, "Ask Claude", "https://api.anthropic.com/v1/messages", 2, cred="anthropicApi")
-    code(w, "Verdict", J.INJ_NORMALIZE, 3)
-    w.chain("Start", "Build request", "Ask Claude", "Verdict")
+    http_messages(w, "Ask Claude", url, 2, cred="anthropicApi")
+    code(w, "Verdict", J.INJ_NORMALIZE.replace("__TRY__", "1"), 3)
+    if_true(w, "Retry AI check?", "={{ $json.retry === true }}", 4)
+    w.add("Wait before retry", "n8n-nodes-base.wait", 1.1, {"resume": "timeInterval", "amount": "={{ $json.wait }}",
+                                                            "unit": "seconds"}, 5, 1,
+          webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, f"q119/{key}/wait")))
+    code(w, "Retry request", "return [{ json: $('Build request').first().json }];", 6, 1)
+    http_messages(w, "Ask Claude (retry)", url, 7, 1, cred="anthropicApi")
+    code(w, "Verdict (retry)", J.INJ_NORMALIZE.replace("__TRY__", "2"), 8, 1)
+    w.chain("Start", "Build request", "Ask Claude", "Verdict", "Retry AI check?")
+    w.chain("Retry AI check?", "Wait before retry", "Retry request", "Ask Claude (retry)", "Verdict (retry)")
+    code(w, "Answer", "return $input.all();", 5, -1)
+    w.link("Retry AI check?", "Answer", out=1)
     return w
 
 

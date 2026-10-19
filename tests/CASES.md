@@ -125,9 +125,10 @@ the guard screens" comes from owner decision 14, gate v4).
   over it. No alert for the injection itself (rule 9).
 - **Rule 6, how the guard screens (gate v4, owner decision 2026-10-19).** The
   input is screened by a code check and by an AI injection check (a small
-  AI step that answers YES or NO). Either one flagging is enough. If the AI
-  check fails (API error, no clear answer), the item goes to review with an
-  alert. Expected results of the cases do not change: obvious injections
+  AI step that answers YES or NO). Either one flagging is enough. On an API
+  error a retry can fix, the AI check asks once more (decision 15). If the AI
+  check still fails (API error, no clear answer), the item goes to review
+  with an alert. Expected results of the cases do not change: obvious injections
   are needs_review, normal text is not flagged.
 - **Rule 7, the second AI step.** Its answer goes through the same cleaning
   and checks. It is called once and never retried; an HTTP error or a
