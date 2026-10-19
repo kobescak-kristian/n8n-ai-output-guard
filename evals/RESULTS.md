@@ -26,3 +26,8 @@ miss analysis | changed variables vs previous entry | cost.
 - Changed variables vs previous entry: first entry.
 - Cost: live calls 16,668 input + 5,648 output tokens on claude-sonnet-5-5 ($2 / $10 per million): about $0.09. Slack: every review and alert message returned a ts.
 
+### 2026-10-19 | visible-2 and visible-3 | development runs, NOT GATED
+- visible-2: config v3, workflows 64038e3 (first code red-team fixes), 127 visible cases (SHA-256 5f5277de...). Runner exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30. Artifact tests/results/visible-2.score.json.
+- visible-3: workflows 2457446 + 11 new visible cases (injection check v3), 138 visible cases (SHA-256 bb6c66a9...). Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30 (no live input wrongly flagged), live model claude-sonnet-5-5. Artifact tests/results/visible-3.score.json.
+- Changed variables vs visible-1: injection check rewritten twice (code red teams), validator and runner fixes; visible cases added (none changed except U1 earlier). Hold-out not used.
+- Fix kit dev run fixkit-dry (51 visible claim cases, 2457446, not gated): BEFORE 13 crashes, 19 invalid rows, 4 rows that should not exist, 15 valid; AFTER 0 crashes, 0 bad rows, 32 valid rows.

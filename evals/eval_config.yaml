@@ -177,17 +177,17 @@ dataset:
   visible_set:
     generator: tests/make_cases.py
     file: tests/cases/visible.json
-    cases: 127
+    cases: 138
     version: 3
-    per_kind: "malformed_json 10, schema_fields 13, out_of_range 14, empty_refusal 10, api_error 16, prompt_injection 21, correct 38, setup 5 (v3 added 40 simulated cases from R1 and the interaction sweep; 8 more simulated cases after the P3 code red team, 2026-10-19: PI18-PI21, OK37, OK38, SF13, OR14)"
-    per_status_gated: "first listed status: ok 39, needs_review 44, ok_after_retry 30, fallback 8, failed 5"
+    per_kind: "malformed_json 10, schema_fields 13, out_of_range 14, empty_refusal 10, api_error 16, prompt_injection 29, correct 41, setup 5 (v3 added 40; after the P3 code red team 8 more: PI18-PI21, OK37, OK38, SF13, OR14; after the fix red team 11 more: PI22-PI29, OK39-OK41; all 2026-10-19, before any gated run)"
+    per_status_gated: "first listed status: ok 42, needs_review 52, ok_after_retry 30, fallback 8, failed 5"
     live: 35
     rate_cases: 30
-    sha256: "5f5277dec53d92b7bf0b1626e69abd9bd938d4eaa7ab45839ac1e09474956e17"
+    sha256: "bb6c66a9d6c6d080f00ee235b323645354af12cab892f9951a4cef742f7cacae"
     deterministic: "two runs of the generator give the same SHA-256 (checked 2026-10-19; earlier files 25459500... for 119 cases, d1b36555..., d44a17e5...)"
     self_check: "the generator stops on a structural mistake (validate) and asserts every simulated expected status and data against the reference validator (self_check); tests/test_make_cases.py plants 17 mistakes and every one must stop it"
   hold_out_set:
-    share: "about 30% of all cases: at least 23 cases (at least 3 per kind, including setup); sealed with 31 cases. After the visible additions of v2, v3 and the code red team the share is 31 of 158 = 20% (owner informed 2026-10-19; adding a second sealed batch is a decision for the owner)"
+    share: "about 30% of all cases: at least 23 cases (at least 3 per kind, including setup); sealed with 31 cases. After the visible additions of v2, v3 and the code red team the share fell to 20%; owner decision 13 (2026-10-19) added a second sealed batch of 35 cases (evals/holdout2_commitment.json, e6f65f3): 66 of 204 cases = 32%"
     author: "a separate session that does not build the guard; the builder does not see the cases before the final run"
     input: "the author reads tests/CASES.md and tests/schemas/ only, not the guard workflow"
     commitment: "evals/holdout_commitment.json: case count, count per kind and per status, SHA-256 of the sealed archive; committed before the guard build starts"
