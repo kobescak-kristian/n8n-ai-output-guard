@@ -1012,7 +1012,9 @@ def clean(text):
     t = text.strip()
     try:
         return json.loads(t, parse_constant=_reject_constant)
-    except (ValueError, RecursionError):
+    except RecursionError:
+        return []  # valid JSON nested too deeply for python: JavaScript parses it, and it is not one object
+    except ValueError:
         pass
     a, b = t.find("{"), t.rfind("}")
     if a == -1 or b <= a:

@@ -121,11 +121,20 @@ function schemaProblems(s, p, top) {
   return out;
 }
 
+// exactly the characters python str.strip() removes (the reference); a byte-order mark is not one. Linear time.
+const PY_WS = new Set([9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288]);
+function pyTrim(x) {
+  let a = 0, b = x.length;
+  while (a < b && PY_WS.has(x.charCodeAt(a))) a++;
+  while (b > a && PY_WS.has(x.charCodeAt(b - 1))) b--;
+  return x.slice(a, b);
+}
+
 // the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)
 function cleanParse(text) {
   if (text === null || text === undefined) return { ok: false, why: 'empty answer' };
   // trim exactly what python str.strip() trims (the reference): a byte-order mark is NOT white space
-  const t = String(text).replace(/^[\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g, '');
+  const t = pyTrim(String(text));
   if (!t) return { ok: false, why: 'empty answer' };
   try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
@@ -157,7 +166,7 @@ function classify(r) {
 function retryAfterSeconds(v) {
   if (v === undefined || v === null || String(v).trim() === '') return 1;
   const t = String(v).trim();
-  let secs = /^\d+(?:\.\d+)?$/.test(t) ? Number(t) : NaN;
+  let secs = /^\+?\d+(?:\.\d+)?(?:e\+?\d+)?$/i.test(t) ? Number(t) : NaN;
   if (Number.isNaN(secs)) { const d = Date.parse(t); if (!Number.isNaN(d)) secs = (d - Date.now()) / 1000; }
   if (Number.isNaN(secs)) return 1;
   return Math.min(Math.max(secs, 0), 20);
@@ -541,7 +550,7 @@ const b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {});
 const text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();
 const verdict = text.startsWith('YES') ? 'yes' : text.startsWith('NO') ? 'no' : 'error';
 return [{ json: { verdict, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0, tokens_out: (b.usage || {}).output_tokens || 0,
-  error_message: verdict === 'error' ? 'unexpected answer: ' + text.slice(0, 60) : '' } }];
+  error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];
 """
 
 # ---------- review form ----------
