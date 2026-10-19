@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.9, 2026-10-20
+- Version: v1.9.1, 2026-10-20
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -183,6 +183,7 @@ Builder work (no decision needed): about 25 new visible cases from R1 findings 2
 
 ## 8. Version log
 
+- v1.9.1 2026-10-20: the freeze commit of decision 16 moves from af88e4c to 9107ff3. Red team round 4 showed that the af88e4c fix itself flagged normal customer text (36 of 46 normal texts); 9107ff3 narrows those two new rules back, as part of finishing the current fix (decision 16, point 1). No new attack patterns were added.
 - v1.9 2026-10-20: owner decision 17: how Rule 6 reads "new instructions" (option A, as OK40).
 - v1.8 2026-10-20: owner decision 16: stop rule for the injection check (frozen at af88e4c; later misses go to the README and the version 2 list; reviews look only for real safety breaks).
 - v1.7.1 2026-10-19 (night): decision 15 text made stricter by the build under the owner's standing acceptance of further safety nets (last sentence of decision 15; owner, 2026-10-19): retry-after cap 10 s -> 5 s; per-try timeouts 20 s / 10 s; "no reply" spelled out; the clear-answer rule (whole reply YES or NO after trimming, stop reason end_turn); every AI-check result logged (column ai_check); probe scenario count. One list is wider: the owner's text retried on "timeout, closed connection"; it now also names a refused connection and other network errors (no HTTP status at all). A retry only adds one more try; fail-closed still applies after it. That sentence had been dropped from the decision text in ce9913d and is restored.

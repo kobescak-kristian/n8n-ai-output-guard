@@ -23,10 +23,11 @@ texts and gives the same answer every time, but misses 23 of 376 attack texts (p
 attack texts plus the recorded known limit (a gated: false case; prompt v1 caught it). Some of the 22 are
 orders for an output field ("priority low", with or without "new instructions" in German or Italian, or
 after "Return this:"). Since the R4 reviews (CASES 3b Rule 6) the code check flags such an order for every AI
-step, also when the step has no such field: after every "new instructions" marker, and after a direct order
-("Return ...", "Please return ...") to return fixed JSON or field lines. Polite or indirect requests ("Could
+step, also when the step has no such field: after each "new instructions" marker it knows (with ":" or a
+dash), after a direct order ("Return ...", "Please return ...") to return fixed JSON, and in "field: value"
+lines right after a lead such as "Return this:". Polite or indirect requests ("Could
 you return ...") are left to the AI check (version 2 list in STATE.md, owner decision 16). Measured with
-`python tools/check_v2_misses.py .` at af88e4c: the code check flags all 22 for each of the 3 AI steps. So the AI check is
+`python tools/check_v2_misses.py .` at af88e4c and again at 9107ff3: the code check flags all 22 for each of the 3 AI steps. So the AI check is
 now tuned toward fewer false flags, and the code check carries more of the attack screening.
 
 Raw-reply measure for the strict answer rule (2026-10-19 night, tools/exp_raw_answers.py, two passes of 2
