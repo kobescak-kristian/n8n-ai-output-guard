@@ -108,6 +108,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--model", default="claude-haiku-5-5")
+    ap.add_argument("--file", help="JSON with {attacks: [[step, text]], normal: [[step, text]]} instead of the test lists")
+    ap.add_argument("--tag", default="")
     a = ap.parse_args()
     api = Api()
     if a.push:
@@ -119,7 +121,11 @@ def main():
     import runner as R
     base = load_env()["N8N_URL"].rstrip("/") + "/webhook/"
     summary, raw = [], []
-    for label, items, must in lists():
+    sets = lists()
+    if a.file:
+        doc = json.loads(Path(a.file).read_text(encoding="utf-8"))
+        sets = [("file attacks", [tuple(x) for x in doc["attacks"]], True), ("file normal", [tuple(x) for x in doc["normal"]], False)]
+    for label, items, must in sets:
         answers = []
         for k in range(0, len(items), 25):
             chunk = [t for _, t in items[k:k + 25]]
@@ -140,7 +146,7 @@ def main():
                                              for (s, t), x, c in zip(items, answers, codes)]})
         print("%-28s n=%3d  classifier wrong %3d  code wrong %3d  code-or-classifier wrong %3d" % (
             label, len(items), bad_cls, bad_code, bad_both), flush=True)
-    out = ROOT / "tests" / "results" / ("exp-classifier-%s.json" % a.model)
+    out = ROOT / "tests" / "results" / ("exp-classifier-%s%s.json" % (a.model, ("-" + a.tag) if a.tag else ""))
     out.write_text(json.dumps({"model": a.model, "prompt": PROMPT, "summary": summary, "raw": raw}, ensure_ascii=False,
                               indent=1), encoding="utf-8")
     print("written", out.name)
