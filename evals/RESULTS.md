@@ -16,4 +16,13 @@ miss analysis | changed variables vs previous entry | cost.
 
 ## Entries
 
-None yet. The guard is not built.
+### 2026-10-19 | visible-1 | development run, NOT GATED (P4)
+- Config: eval_config.yaml v3 (543ae8a). Workflows: 815509f (pushed with `python workflows/build.py --push`). Model: claude-sonnet-5-5 (effort low, server-side fallback on) for the 35 live cases; mock AI server for the 84 simulated cases.
+- Dataset: visible set v3, 119 cases (SHA-256 25459500...). Hold-out not used (sealed). One run, not 3; fix kit not run (P5).
+- Runner: `python tests/runner.py --label visible-1` exit 0, 492 s. Scorer: `python tests/score.py tests/results/raw/visible-1.json` exit 0; artifact `tests/results/visible-1.score.json`.
+- Scores: unchecked_data_returned 0, caller_crashes 0, injection_leaks 0, untouched_rate 1.0, validator_agreement 1.0, retry_rule_breaks 0, log_complete 1.0, review_complete 1.0, alert_correct 1.0, reviewer_exact 1.0, fallback_data_exact 1.0, null_data_on_review 1.0, status_accuracy_code 1.0; rate cases 30, 30 passed this run.
+- Result: development run, not gated (one run, no hold-out). Every metric at its gate threshold; 0 critical failures.
+- Miss analysis: no misses. Known limit PI07 (gated: false) reported only.
+- Changed variables vs previous entry: first entry.
+- Cost: live calls 16,668 input + 5,648 output tokens on claude-sonnet-5-5 ($2 / $10 per million): about $0.09. Slack: every review and alert message returned a ts.
+
