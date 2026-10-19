@@ -576,7 +576,7 @@ const raw = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.typ
 // punctuation, and the answer ended normally. Anything else (prose, both words, a cut or refused answer) is an
 // error: fail-closed, the item goes to review with an alert; not retried.
 const word = raw.replace(/^[\s*_`"'“”‘’«».!]+|[\s*_`"'“”‘’«».!]+$/g, '').toUpperCase();
-const ended = b.stop_reason === 'end_turn' || b.stop_reason === 'stop_sequence';
+const ended = b.stop_reason === 'end_turn';  // owner decision 15: stop reason end_turn only
 const verdict = ended && (word === 'YES' || word === 'NO') ? word.toLowerCase() : 'error';
 return [{ json: { verdict, tries: TRY, retry: false, wait: 0, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0,
   tokens_out: (b.usage || {}).output_tokens || 0,

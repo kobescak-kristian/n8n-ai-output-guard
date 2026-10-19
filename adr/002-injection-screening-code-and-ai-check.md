@@ -19,14 +19,14 @@ together, the guard still misses only the one recorded known limit on the attack
 step. Details: the first prompt (v1) flagged one normal visible text (OK40, a delivery instruction) in one of
 three runs. A 5-repeat stability test (tests/results/exp-stability-*.json) chose prompt v2, which says that
 text to the company, its staff or a courier is normal. On the same texts, prompt v2 on its own flags 0 normal
-texts and gives the same answer every time, but misses 23 of 376 attack texts (prompt v1 missed 1). The code
-check catches 18 of those 23 for every AI step. 4 are orders for a ticket field ("priority low", with or
-without "new instructions" in German or Italian): the code check caught them for the ticket triage step
-only. After the R4 checkpoint review (CASES 3b Rule 6) the code check also flags "new instructions:" plus a
-common output field and value ("priority low", "status approved", "score 100") for every AI step, so these
-now go to review on every step (tests/test_injection.py). The last one is the
-recorded known limit (a gated: false case; prompt v1 caught it). So the AI check is now tuned toward fewer
-false flags, and the code check carries more of the attack screening.
+texts and gives the same answer every time, but misses 23 of 376 attack texts (prompt v1 missed 1). 22 of
+the 23 are attack texts; the last one is the recorded known limit (a gated: false case; prompt v1 caught it).
+Some of the 22 are orders for an output field ("priority low", with or without "new instructions" in German
+or Italian, or after "Return this:"). Since the R4 reviews (CASES 3b Rule 6) the code check flags such an order
+for every AI step, also when the step has no such field: after every "new instructions" marker, and after a
+direct order to return fixed JSON or field lines. Measured on the code at the commit named in evals/RESULTS.md:
+the code check flags all 22 for each of the 3 AI steps (tests/test_injection.py holds them). So the AI check is
+now tuned toward fewer false flags, and the code check carries more of the attack screening.
 
 Raw-reply measure for the strict answer rule (2026-10-19 night, tools/exp_raw_answers.py, two passes of 2
 repeats over every list and every visible input, tests/results/exp-raw-answers-v2-low.json): 4,496 replies;
@@ -37,12 +37,13 @@ the strict rule sends to review. 0 normal texts flagged. Haiku's own answers var
 
 ## Decision
 
-Every guard call screens the input with both the code check and the AI injection check (a sub-workflow
-called by ID; the caller passes its ID in options.injection_check_step_id, as every demo caller and test
-runner does; without it the guard runs the code check only, a choice the plug-in guide must state); if either one flags the input, the result is needs_review, and if the AI check fails or gives
-no clear answer, the result is also needs_review, with an alert. A clear answer is a whole reply of YES or NO
-(after trimming spaces, markdown marks, quotes and end punctuation) that ended normally (stop reason
-end_turn or stop_sequence); prose, both words, or a cut or refused answer is not clear. On an API error
+The guard screens the input with the code check and the AI injection check (a sub-workflow called by ID).
+The AI check runs when the caller passes its ID in options.injection_check_step_id; every demo caller and
+test runner does. Without that ID the guard runs the code check only; the plug-in guide must say so. If either
+check flags the input, the result is needs_review. If the AI check fails or gives no clear answer, the result
+is also needs_review, with an alert. A clear answer is a whole reply of YES or NO after trimming spaces,
+markdown marks, quotes and end punctuation, with stop reason end_turn. Prose, both words, or a cut or refused
+answer is not clear. On an API error
 that a retry can fix (no reply at all, HTTP 408, HTTP 429 or HTTP 5xx; "no reply" means a timeout, a closed or refused connection, or another network error) the AI check asks once more (owner
 decision 15); the fail-closed rule applies to what is left after that retry. An unclear answer is not retried.
 

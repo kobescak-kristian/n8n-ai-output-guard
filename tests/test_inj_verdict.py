@@ -36,7 +36,7 @@ CASES = [
     ("trailing newline", 1, ok("No\n"), "no", False, 0),
     ("markdown bold", 1, ok("**NO**"), "no", False, 0),
     ("quoted", 1, ok('"YES"'), "yes", False, 0),
-    ("stop_sequence is a normal end", 1, ok("NO", "stop_sequence"), "no", False, 0),
+    ("stop_sequence is not clear (decision 15: end_turn only)", 1, ok("NO", "stop_sequence"), "error", False, 0),
     ("label before answer", 1, ok("Answer: YES"), "error", False, 0),
     ("YES twice", 1, ok("YES YES"), "error", False, 0),
     ("both words", 1, ok("NO, this is not YES"), "error", False, 0),

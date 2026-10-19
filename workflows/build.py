@@ -3,7 +3,9 @@
 python workflows/build.py           -> workflows/*.json (placeholders, no credential IDs)
 python workflows/build.py --push    -> also creates/updates every Q119 workflow in local n8n through the
                                        n8n API (key in the git-ignored .env), fills credential and workflow
-                                       IDs by name, publishes the ones with a trigger
+                                       IDs by name, publishes the ones with a trigger, and adds any column
+                                       of TABLES that an existing q119_* data table lacks (never removes
+                                       or changes a column)
 
 The workflow logic lives here and in guard_js.py; the JSON files are build output.
 """

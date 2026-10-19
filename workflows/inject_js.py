@@ -23,8 +23,10 @@ Signals (any one gives a hit):
   fixed answer      return/answer/use ... + a JSON object or "field: value" lines with schema keys
   addressed to AI   "Hey ChatGPT," / "ATTENTION AI:" / "Note to the AI:" + an order right after it
   comment to AI     <!-- ... assistant / AI / bot / LLM ... -->
-  new instructions  "new instructions:" + a schema field, an order, or a common output field + value
-                    ("priority low") for any AI step
+  new instructions  every "new instructions:" marker (also "-", "—", ".", a line break, singular forms, several
+                    languages) + a schema field, an order, or a common output field + value ("priority low",
+                    "low priority", "priority -> low", "status closed", "rate us 100") for any AI step;
+                    more than 200 markers in one input is a hit by itself
 """
 
 INJECT = r"""
@@ -305,14 +307,26 @@ const NUM_WORDS = '(?:-?\\d+(?:[.,]\\d+)*|zero|one|two|three|four|five|ten|hundr
 // ("Neue Anweisungen: priority low" to a claim step); the customer's own new delivery instructions stay normal
 const GENERIC_PAIRS = [
   [['priority', 'urgency', 'severity'].concat(FIELD_TR.priority, FIELD_TR.urgency),
-    ['low', 'high', 'medium', 'urgent', 'critical'].concat(VALUE_TR)],
-  [['category', 'status', 'label', 'decision', 'verdict', 'sentiment'].concat(FIELD_TR.category),
-    ['approved', 'rejected', 'spam', 'true', 'false', 'null']],
+    ['low', 'high', 'medium', 'urgent', 'critical', 'niedrige', 'niedriger', 'niedriges', 'hohe', 'hoher', 'hohes',
+      'dringende', 'dringender'].concat(VALUE_TR)],
+  [['category', 'status', 'label', 'decision', 'verdict', 'sentiment', 'flagged', 'injection'].concat(FIELD_TR.category),
+    ['approved', 'approve', 'rejected', 'spam', 'true', 'false', 'null', 'closed', 'resolved', 'safe', 'benign',
+      'accepted', 'ignored']],
   [['score', 'fit[\\s_-]*score', 'rating'], ['-?\\d+']],
 ];
-const GENERIC_ORDERS = GENERIC_PAIRS.map(([f, v]) => RX(EB + '(?:' + f.join('|') + ')' + EE +
-  '\\s*(?:=|:|is|to|as|should\\s+be|must\\s+be)?\\s*["\']?' + EB + '(?:' + v.join('|') + ')' + EE));
+// between field and value: "priority: low", "priority -> low", "priority is now low", "Priorität auf niedrig"
+const GEN_SEP = '\\s*["\'»”’]?\\s*(?:=>|->|→|=|:|—|–|-|is(?:\\s+now)?|will\\s+be|(?:should|must)(?:\\s+now)?\\s+be|' +
+  '(?:set\\s+)?to|as|of|auf|ist|est|es|è|é)?\\s*(?:very\\s+)?["\'«“‘]?\\s*';
+const GENERIC_ORDERS = GENERIC_PAIRS.flatMap(([f, v]) => [
+  RX(EB + '(?:' + f.join('|') + ')' + EE + GEN_SEP + EB + '(?:' + v.join('|') + ')' + EE),
+  RX(EB + '(?:' + v.join('|') + ')\\s+(?:' + f.join('|') + ')' + EE),  // "low priority", "niedrige Priorität"
+]).concat([
+  RX(EB + '(?:rate|score|grade)\\s+(?:us|me|it|this|them)\\s+(?:at\\s+|as\\s+|a\\s+|with\\s+)?-?\\d+' + EE),
+  RX(EB + 'give\\s+(?:us|me|it|them|this(?:\\s+\\p{L}+)?)\\s+(?:a\\s+)?-?\\d+\\s*(?:points?|/\\s*\\d+|%)'),
+]);
 const GENERIC_ORDER = { test: (x) => GENERIC_ORDERS.some((re) => re.test(x)) };
+const GENERIC_KEYS = ['priority', 'urgency', 'severity', 'category', 'status', 'label', 'decision', 'verdict',
+  'sentiment', 'flagged', 'score', 'fit[\\s_-]*score', 'rating'];
 const COMPOUND_AFTER = '(?!\\s+(?:support|plan|shipping|mail|line|tier|customer|access|service|delivery|lane|pass|boarding|seating|level\\s+of\\s+service))';
 
 function fieldNames(k) {
@@ -367,8 +381,13 @@ function fixedHit(t, schema, KEY) {
   const keys = Object.keys((schema && schema.properties) || {}).flatMap(fieldNames);
   if (!keys.length) return false;
   const K = '(?:' + keys.join('|') + ')';
+  const G = '(?:' + GENERIC_KEYS.join('|') + ')';
+  // common output fields count only in a direct order ("Return ...", "Please return ..."), not in
+  // "our API should return the following JSON: {...}"
+  const ORDER_START = '(?:^|\\n|[.!?;:]\\s)\\s*(?:please\\s+|now\\s+|just\\s+|only\\s+)?';
   const res = [
     RX(EB + FIXED_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']' + K + '["\']\\s*:'),
+    RX(ORDER_START + FIXED_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']' + G + '["\']\\s*:'),
     RX(EB + '(?:correct|expected|right|desired|required|final)\\s+(?:output|answer|json|response|result)' + EE + '\\s*(?:is|:|=)?\\s*\\{\\s*["\']?' + K),
     RX(EB + '(?:your|the)\\s+(?:answer|response|output|reply|json)\\s+(?:must|should|has\\s+to)\\s+be\\s+(?:exactly\\s+)?(?:this\\s*:?\\s*)?\\{'),
   ];
@@ -376,10 +395,13 @@ function fixedHit(t, schema, KEY) {
   // "Return this:\npriority: low" or "Answer format:\nfit_score: 100": a field line with a value that field allows
   const F = fieldRegexes(schema);
   const lead = RX(EB + '(?:' + FIXED_VERBS + EE + '(?:\\s+with)?\\s+(?:this|exactly|the\\s+following|only)|(?:answer|output|response|reply)\\s+format)\\s*:?', 'gi');
+  const orderBefore = RX(ORDER_START + '$');
   let m;
   while ((m = lead.exec(t)) !== null) {
     const rest = t.slice(m.index + m[0].length, m.index + m[0].length + 160);
-    if (F.declared.some((re) => re.test(rest.split('\n').slice(0, 4).join('\n')))) return true;
+    const lines = rest.split('\n').slice(0, 4).join('\n');
+    if (F.declared.some((re) => re.test(lines))) return true;
+    if (GENERIC_ORDER.test(lines) && orderBefore.test(t.slice(Math.max(0, m.index - 12), m.index))) return true;
   }
   return false;
 }
@@ -482,13 +504,22 @@ function hitsIn(t, schema, F, KEY) {
   if (fieldOrderHit(t, F) || (KEY && KEY.test(t)) || VALUE_ORDERS.some((re) => re.test(t))) hits.push('field order');
   if (fixedHit(t, schema, KEY)) hits.push('fixed answer');
   if (addressHit(t, F, KEY)) hits.push('order addressed to the AI');
-  const ni = RX(EB + '(?:new|updated|revised)\\s+(?:system\\s+)?instructions?\\s*[:\\-–]|(?:neue\\s+anweisungen|nouvelles\\s+instructions|nuevas\\s+instrucciones|nuove\\s+istruzioni|novas\\s+instruções|nieuwe\\s+instructies|nowe\\s+instrukcje|nove\\s+upute|новые\\s+инструкции)\\s*:').exec(t);
-  if (ni) {
+  // every marker is checked, not only the first one; more than 200 markers in one input is a hit by itself
+  const NI = RX(EB + '(?:(?:new|updated|revised)\\s+(?:system\\s+)?instructions?(?:\\s+follow)?|neue\\s+anweisung(?:en)?|' +
+    'nouvelles?\\s+(?:instructions?|consignes?)|nuevas?\\s+instrucci(?:ón|on|ones)|nuov[ae]\\s+istruzion[ei]|' +
+    'novas?\\s+instruç(?:ão|ões)|nieuwe\\s+instructies?|nowe\\s+instrukcje|nowa\\s+instrukcja|nove\\s+upute|nova\\s+uputa|' +
+    'нов(?:ые|ая)\\s+инструкци[ия])\\s*(?:[:\\-–—.]|\\n)', 'gi');
+  const keys = Object.keys((schema && schema.properties) || {}).flatMap(fieldNames);
+  const KEYS_RX = keys.length ? RX(EB + '(?:' + keys.join('|') + ')' + EE) : null;
+  let ni, markers = 0;
+  while ((ni = NI.exec(t)) !== null) {
+    if (++markers > 200) { hits.push('new instructions'); break; }
     const rest = t.slice(ni.index, ni.index + 120);
-    const keys = Object.keys((schema && schema.properties) || {}).flatMap(fieldNames);
     const after = t.slice(ni.index + ni[0].length, ni.index + 160);
-    if ((keys.length && RX(EB + '(?:' + keys.join('|') + ')' + EE).test(rest)) || isOrder(after, F, KEY) || GENERIC_ORDER.test(after))
+    if ((KEYS_RX && KEYS_RX.test(rest)) || isOrder(after, F, KEY) || GENERIC_ORDER.test(after)) {
       hits.push('new instructions');
+      break;
+    }
   }
   return hits;
 }
