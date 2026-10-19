@@ -23,8 +23,8 @@ Signals (any one gives a hit):
   fixed answer      return/answer/use ... + a JSON object or "field: value" lines with schema keys
   addressed to AI   "Hey ChatGPT," / "ATTENTION AI:" / "Note to the AI:" + an order right after it
   comment to AI     <!-- ... assistant / AI / bot / LLM ... -->
-  new instructions  every "new instructions:" marker (also "-", "—", ".", a line break, singular forms, several
-                    languages) + a schema field, an order, or a common output field + value ("priority low",
+  new instructions  every "new instructions" marker followed by ":" or a dash ("-", "–", "—"; also "follow:",
+                    singular forms, several languages) + a schema field, an order, or a common output field + value ("priority low",
                     "low priority", "priority -> low", "status closed", "rate us 100") for any AI step;
                     more than 200 markers in one input is a hit by itself
 """
