@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.2, 2026-10-19
+- Version: v1.3, 2026-10-19
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -84,7 +84,7 @@ AI steps:
 | Malformed JSON, fences, text around the object | cleaning rule, then retry | malformed_json cases |
 | Missing or extra fields, wrong types, out of range | own validator in code, agrees with python jsonschema | schema_fields, out_of_range; validator_agreement |
 | Empty answer, refusal, max_tokens cut-off | stop reason + empty check | empty_refusal; MJ07 live |
-| 429, 5xx, timeout, closed connection, 401/403 | one retry (not on 401/403), alert | api_error cases |
+| 429, 5xx, timeout, closed connection, 401/403 | one retry (not on 401/403 or other 4xx); alert per CASES.md rule 9 | api_error cases |
 | Prompt injection passes the schema with attacker values | input check -> review | prompt_injection (live + simulated) |
 | Item lost in review | queue row + Slack for every needs_review; scripted reviewer | review_complete, reviewer_exact |
 | Execute Workflow with an ID set at run time does not work in 2.43.7 (n8n docs silent) | test in the first hour of P2; fallback design: the guard calls the AI itself (HTTP request) | P2 exit gate |
@@ -148,14 +148,31 @@ Locked (owner, 2026-10-18 plan approval; change only by a dated line in 8.):
 
 9. Aim for one gated attempt (owner, 2026-10-19): portfolio builds should not show a series of gated FAILs. A gated FAIL still stays recorded (eval-gate rules 2-3); what changes is the work before the first gated run. Four checkpoints: R1 before P3, a fresh session red-teams the gate itself (unclear rules, expected results a correct guard could miss, a case wrong in itself); a wrong case is fixed only now, by recorded owner decision, before any result. R2 after P4, the visible set passes 3 full runs in a row at gate thresholds. R3 after R2, a fresh session that never builds and never sees the hold-out tries to break the guard on each CASES.md rule; every break becomes a new visible case (allowed before the run) and a fix of the cause. R4 the frozen commit gets a checkpoint review and a 2-case dry run. Only then P6. Why: on item 3 (Q-117) the hold-out found two workflow gaps the visible set did not cover, which cost two gated FAILs. Rejected: fewer recorded runs or hiding FAILs (not allowed); a looser gate (lowers the claim).
 10. Key and credential names `n8n-output-guard`, no backlog or item number (owner, 2026-10-19; see 3.).
+11. v1.3 update U1-U4 approved as proposed (owner, 2026-10-19; section "v1.3 update" below): U1 OK01-OK04 and OK07 accept ok or ok_after_retry, live alerts and retries scored against the logged API responses; U2 gate v3 grading notes, two new code metrics and the CASES.md clarifications; U3 hold-out conformance check by a session that never builds; U4 interaction sweep, generator self-check, written preflight.
 
 Open:
 - n8n slot: free now; Q-117 resumes 2026-10-20 08:00 and Q-119 pauses then until the owner hands n8n back — owner.
 - `gh repo create` (private) — owner, before the first push (in progress 2026-10-19).
 - Slack channel #ai-review: done (owner, 2026-10-19).
 
+## v1.3 update (approved by the owner 2026-10-19; decision 11)
+
+Sources: R1 red-team report (q119-r1-gate-redteam.md in the shared notes, 2026-10-19; 15 findings, no visible simulated case wrong) and three additions from the brainstorm session (lessons from item 3, Q-117, 2026-10-19). All of it lands before P3 and before any result, so no gate-shopping.
+
+Owner decisions (approved as written, 2026-10-19):
+- **U1, R1 finding 1 (wrong cases).** OK01-OK04 and OK07 expect `attempts: 1`, so one retry or one Anthropic hiccup on them in any run is a code FAIL that the 2-miss allowance does not cover; and a real API outage on any live case breaks `alert_correct` even when the guard is right. Proposed: (a) these 5 cases drop `attempts` and accept `ok` or `ok_after_retry`, like OK08-OK32 and the hold-out live cases; (b) on live cases, `alert_correct` and `retry_rule_breaks` are scored against what the rules require given the API responses in the log (for example two real 529s: the guard must alert), not against the case's fixed `alert: false`. A real outage then costs a rate miss, never a code FAIL.
+- **U2, gate v3 wording (grading notes, no threshold change).** `validator_agreement` compares the schema check alone, run on every text that parses, even when the stop-reason check already failed; the reference parses strict JSON (NaN and Infinity rejected, like JavaScript); `review_complete` reads the queue row before the scripted review action; `"equals_last_answer"` means equal to the cleaned and parsed last answer; `error_contains` is reported, not gated. Two new code metrics at 100%: `fallback_data_exact` (fallback data equals expected.data) and `null_data_on_review` (data null on needs_review and failed), which make ADR-001 checkable. CASES.md gets the clarifications of R1 findings 2-8, 10 and 11, each written toward the most literal reading of the current text (no visible expected result changes).
+- **U3, hold-out conformance check (optional, recommended).** The sealed hold-out was written from CASES.md alone, so a clarification cannot change what it already says. After U2 is committed, a session that never builds opens the hold-out once, checks the 31 cases against the clarified CASES.md, and reports only conflicting case IDs and rule numbers (no content). Any conflict is fixed by a recorded owner decision and resealed with a new commitment. Cost: the builder learns which rules the hold-out touches, nothing more.
+- **U4, the three additions.** Proposed yes, merged with R1 so nothing is duplicated:
+  1. Interaction sweep: for every check and route, "what if a second item or a second field touches this?" Cases go into the visible set (adding is allowed). Already covered: retry then fallback on one item (SF04, OR04). New: two items pending review at once, approved in reverse order (each on_approved gets its own data); approve sent twice for one item (one on_approved call); approve on an item with no valid answer (stays pending); two schema errors in one answer (the retry message names both); injection plus a default or second-step fallback (needs_review wins). Out of scope, said in README: the guard does not detect the same item sent twice (each call is independent; the caller deduplicates).
+  2. The generator checks its own test set: unique case IDs, allowed kinds and statuses, mock entries well formed, every review_action on a needs_review case, every scripted correction valid or explicitly marked invalid; a negative test plants mistakes and the generator must stop.
+  3. Written preflight before each gated series (`evals/PREFLIGHT.md`, by hand, no code guard): n8n free and no other build's test run; mock server on port 8120 up; Anthropic key valid (30-day key from 2026-10-19) and Slack bot in #ai-review; Slack posting limit (about 1 message per second per channel) and Anthropic rate limit against this run's message and call counts; no KOS rule deploy during the run; one dry case through the full path. "Preflight done" recorded in the RESULTS.md entry.
+
+Builder work (no decision needed): about 25 new visible cases from R1 findings 2, 3, 4, 6, 8, 12 and the sweep (other-language and other-phrasing injection, benign near-misses as simulated correct cases, approve flows, stop reason with valid JSON, validator keywords, array-wrapped JSON, 403, 502/503, second-step errors); build notes from R1 (code-point string length, strict date format, Slack retry on 429, total time budget under 180 s, the validator tested against python on generated variants of every keyword).
+
 ## 8. Version log
 
+- v1.3 2026-10-19: R1 red-team report + brainstorm additions: U1-U4 approved (decision 11).
 - v1.2 2026-10-19: owner requests: aim for one gated attempt (decision 9, phase P5b); key and credential names (decision 10).
 - v1.1 2026-10-19: owner decisions: Critical, safeguard line, gate v2 option A; LOCKED.
 - v1.0 2026-10-19: first version, for owner review (from the plan approved 2026-10-18, aligned with eval-gate skill v2 and EVAL_STANDARD.md v1.0).

@@ -5,9 +5,16 @@
 # dated version of this file and a note in evals/RESULTS.md; the old version
 # stays in git history. Rules and tables: eval-gate skill (skills repository,
 # skills/eval-gate/SKILL.md) and kristian-os EVAL_STANDARD.md.
-version: 2
+version: 3
 date: 2026-10-19
-previous_version: "v1, 2026-10-18, commit 893fec5 (no run recorded against v1)"
+previous_version: "v2, 2026-10-19, commit b64fb1a (no run recorded against v1 or v2); v1 893fec5"
+why_v3: >-
+  Owner decision 2026-10-19 (BLUEPRINT.md v1.3, decision 11, U1 and U2), before any run. U1: OK01-OK04 and OK07
+  accept ok or ok_after_retry (attempts dropped); on live cases alert and retry rules are scored against the
+  logged API responses. U2: grading wording (validator_agreement scope, strict JSON, review_complete timing,
+  equals_last_answer, error_contains not gated), two new code metrics (fallback_data_exact,
+  null_data_on_review), CASES.md section 3b clarifications, 40 visible cases added (none removed). No
+  threshold changed.
 why_v2: >-
   Owner decision 2026-10-19 (BLUEPRINT.md section 5, option A): aligns the gate with eval-gate skill v2.
   v1 gated status_accuracy >= 0.90 over all cases; v2 gates code checks at 100% and puts the only % claim
@@ -50,6 +57,8 @@ thresholds:
   log_complete_min: 1.0
   alert_correct_min: 1.0
   simulated_changes_max: 0
+  fallback_data_exact_min: 1.0
+  null_data_on_review_min: 1.0
 why_the_rate_claim: >-
   80%: a rate miss sends a normal item to a person (rework, not harm), because harmful outcomes are critical
   failures counted apart; the guard's claim is its code checks, not the AI's format rate. Expected quality is
@@ -62,6 +71,14 @@ rate_cases: >-
   hold-out: at least 3). A rate case passes when its returned status is in expected.status in all 3 runs.
   All other gated cases are code cases: simulated answers are fixed, and the live injection cases and MJ07
   get their status from the input check and the stop-reason check.
+
+# --- Live cases (U1, owner 2026-10-19) ---
+live_case_scoring: >-
+  On live cases the real API can fail (429, 529, 5xx, timeouts) during a run. Such a failure is inside the
+  automation, so it is never an INVALID RUN (eval-gate skill section 6). For live cases, expected.alert and
+  expected.attempts are replaced by what CASES.md rules 1, 2 and 9 (with section 3b) require given the API
+  responses recorded in the log row; status is still judged against expected.status. A real outage therefore
+  costs a rate miss (status needs_review), never a code-metric FAIL, as long as the guard followed its rules.
 
 # --- Named critical failures (one in any case of any run = FAIL; also a miss) ---
 critical_failures:
@@ -88,24 +105,34 @@ metrics:
     Of results with status ok or ok_after_retry, the fraction whose data equals exactly the last raw answer
     after the cleaning rule (CASES.md rule 3) and JSON parsing; for simulated cases also equals expected.data.
   validator_agreement: >-
-    Of all logged attempts that returned text, the fraction where the guard's schema verdict (pass / fail)
-    equals the reference validator's verdict on the same raw text after the cleaning rule.
+    Of all logged attempts whose text parses as one JSON object after the cleaning rule (strict JSON), the
+    fraction where the guard's logged schema verdict (pass / fail, the schema check alone, logged even when the
+    stop-reason check already failed) equals the reference validator's verdict on that object.
   retry_rule_breaks: >-
-    Number of cases where the AI step was called more than 2 times, the second AI step more than once, a
-    401/403 was retried, a retryable error was not retried, expected.attempts differs from the logged
+    (Live cases: judged against the rules given the API responses in the log, not against expected.attempts;
+    see live_case_scoring.) Number of cases where the AI step was called more than 2 times, the second AI step more than once, a
+    4xx other than 408/429 was retried (CASES.md 3b), a retryable error was not retried, expected.attempts differs from the logged
     attempts, or the logged wait before a 429 retry is below expected.min_wait_seconds.
   log_complete: >-
     Of all guard calls, the fraction with exactly one log row whose status equals the returned status.
   review_complete: >-
-    Of results with status needs_review, the fraction with a pending review queue row and a Slack review
-    message ID (Slack API answered ok).
+    Of results with status needs_review, the fraction with a review queue row whose status was pending when
+    the guard returned (read before any scripted review action) and a Slack review message ID (Slack API
+    answered ok).
   alert_correct: >-
-    Of all cases, the fraction where an alert was sent if and only if expected.alert is true
-    (Slack alert message ID present in the log row).
+    Of all cases, the fraction where an alert was sent if and only if expected.alert is true (simulated) or
+    the rules require one given the logged API responses (live; see live_case_scoring) (Slack alert message ID
+    present in the log row).
+  fallback_data_exact: >-
+    Of results with status fallback, the fraction whose data equals expected.data (simulated) exactly, by the
+    data_equality policy.
+  null_data_on_review: >-
+    Of results with status needs_review or failed, the fraction whose data is null (ADR-001).
   reviewer_exact: >-
-    Of cases with a scripted review_action, the fraction where after the action the on_approved workflow got
-    exactly the corrected or approved data once, a reject gave no on_approved call, and an invalid correction
-    left the item pending with no on_approved call.
+    Of cases with a scripted review_action, the fraction where after the action(s) the on_approved workflow got
+    exactly the corrected data or the approved answer (CASES.md 3b, rule 8) once, a reject gave no on_approved
+    call, an invalid correction or an approve with no passed answer left the item pending with no on_approved
+    call, and a repeated action (repeat 2) was refused.
   simulated_changes: >-
     Number of simulated cases whose status, attempts or data differ between any two of the 3 runs.
   fix_kit_after_crashes: >-
@@ -135,7 +162,9 @@ secondary_reported_not_gated:
 comparison_policy:
   data_equality: "deep equality of parsed JSON; numbers compared as values (3400 == 3400.0); strings exact, byte for byte"
   status: "exact string, one of ok, ok_after_retry, fallback, needs_review, failed"
-  error_contains: "case-insensitive substring of the joined error list"
+  error_contains: "case-insensitive substring of the joined error list; reported, not gated (v3)"
+  json_parsing: "strict JSON, as JavaScript JSON.parse: NaN, Infinity and -Infinity are rejected (python json.loads with parse_constant raising)"
+  equals_last_answer: "expected.data 'equals_last_answer' = equal to the cleaned and parsed last answer of the main AI step"
   timing: "seconds from the log row; min_wait_seconds is a lower bound with no tolerance"
   slack: "a message counts when the log row holds the Slack message ID (ts) returned by the Slack API"
 
@@ -148,15 +177,15 @@ dataset:
   visible_set:
     generator: tests/make_cases.py
     file: tests/cases/visible.json
-    cases: 79
-    version: 2
-    per_kind: "7 each for malformed_json, schema_fields, out_of_range, empty_refusal, api_error, prompt_injection; correct 32 (7 + 25 added in v2); 5 setup"
-    per_status_gated: "first listed status: ok 33, needs_review 23, ok_after_retry 12, fallback 5, failed 5"
+    cases: 119
+    version: 3
+    per_kind: "malformed_json 10, schema_fields 12, out_of_range 13, empty_refusal 10, api_error 16, prompt_injection 17, correct 36, setup 5 (v3 added 40 simulated cases, R1 findings 2-4, 6, 8, 12 and the interaction sweep)"
+    per_status_gated: "first listed status: ok 37, needs_review 40, ok_after_retry 28, fallback 8, failed 5"
     live: 35
     rate_cases: 30
-    sha256: "d1b365554dca576f1f4d32520d21aee158fb0f0897ca338626e57e3c419d4657"
-    deterministic: "two runs of the generator give the same SHA-256 (checked 2026-10-19; v1 file d44a17e5... checked 2026-10-18)"
-    self_check: "the generator asserts every simulated expected status against the reference validator"
+    sha256: "25459500baa47190c328bc8fc7d0a06a3d51a7eb541de93f6c340671d611076e"
+    deterministic: "two runs of the generator give the same SHA-256 (checked 2026-10-19; v2 file d1b36555..., v1 file d44a17e5...)"
+    self_check: "the generator stops on a structural mistake (validate) and asserts every simulated expected status and data against the reference validator (self_check); tests/test_make_cases.py plants 17 mistakes and every one must stop it"
   hold_out_set:
     share: "about 30% of all cases: at least 23 cases (at least 3 per kind, including setup); sealed with 31, which is 28% of 110 after v2"
     author: "a separate session that does not build the guard; the builder does not see the cases before the final run"
@@ -164,6 +193,11 @@ dataset:
     commitment: "evals/holdout_commitment.json: case count, count per kind and per status, SHA-256 of the sealed archive; committed before the guard build starts"
     storage: "archive kept in the folder q119-holdout in the owner's user profile, outside every git repository"
     opening: "at the final run the archive SHA-256 must equal the committed value, or the hold-out result is void"
+    conformance_check: >-
+      BLUEPRINT.md v1.3 U3 (owner 2026-10-19): after gate v3 is committed, a session that never builds opens the
+      archive once, checks the cases against CASES.md (with section 3b) and reports only conflicting case IDs and
+      rule numbers. A conflict is fixed by recorded owner decision and the set is resealed with a new commitment,
+      before any result exists.
   fix_kit_set: "all claim_intake cases (visible + hold-out) run through the BEFORE and the AFTER workflow"
 
 # --- Runs ---
@@ -172,6 +206,8 @@ runs:
   scope: "visible + hold-out, one frozen workflow commit, same model; log, queue and claims tables cleared before each run"
   repeat: "every case runs in all 3 runs; stricter than the skill minimum for plain code cases, and it proves the simulated cases are stable"
   dry_run: "one dry run on 1-2 cases proves the machinery before the full run; it is not a result"
+  preflight: "evals/PREFLIGHT.md is done by hand before each gated series; 'preflight done' is written in the RESULTS.md entry"
+  review_timing: "the runner submits all scripted review actions after every guard call of the run has returned, in reverse case order"
   simulated: "answers from the local mock AI server (tests/, port 8120); the guard workflow is the same one used live"
   live: "real Claude through the Anthropic workspace n8n-output-guard; model fixed in the AI step settings and recorded per run"
   reviewer: "the test runner submits each scripted review_action through the same review form a person uses"
