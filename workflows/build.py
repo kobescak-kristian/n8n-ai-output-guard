@@ -147,6 +147,11 @@ def build_guard():
     w = WF("guard", "Q119 Guard: AI output guard")
     trigger(w)
     code(w, "Setup check", J.SETUP_CHECK, 1)
+    if_true(w, "AI injection check?", "={{ $json.setup_ok && !!($json.options || {}).injection_check_step_id }}", 1.5, -1)
+    code(w, "Prepare injection check", J.PREPARE_INJ, 1.5, -2)
+    code(w, "Step input 0", J.STEP_ONLY, 1.8, -2)
+    call(w, "Call AI injection check", "={{ $('Prepare injection check').first().json.state.options.injection_check_step_id }}", 2.1, -2)
+    code(w, "Read injection check", J.READ_INJ, 2.4, -2)
     if_true(w, "Setup ok?", "={{ $json.setup_ok }}", 2)
     code(w, "Prepare try 1", J.PREPARE_1, 3)
     code(w, "Step input 1", J.STEP_ONLY, 4)
@@ -179,7 +184,10 @@ def build_guard():
     insert(w, "Write log", "q119_log", 29)
     code(w, "Result", J.RESULT, 30)
 
-    w.chain("Start", "Setup check", "Setup ok?")
+    w.chain("Start", "Setup check", "AI injection check?")
+    w.link("AI injection check?", "Prepare injection check", 0)
+    w.link("AI injection check?", "Setup ok?", 1)
+    w.chain("Prepare injection check", "Step input 0", "Call AI injection check", "Read injection check", "Setup ok?")
     w.link("Setup ok?", "Prepare try 1", 0)
     w.link("Setup ok?", "Decide", 1)
     w.chain("Prepare try 1", "Step input 1", "Call AI step (try 1)", "Check try 1", "Retry?")
@@ -206,6 +214,16 @@ def build_live_step(task, label):
     http_messages(w, "Call Claude", "https://api.anthropic.com/v1/messages", 2, cred="anthropicApi")
     code(w, "Normalize answer", J.NORMALIZE, 3)
     w.chain("Start", "Build request", "Call Claude", "Normalize answer")
+    return w
+
+
+def build_injection_check():
+    w = WF("injection-check", "Q119 Injection check: Claude Haiku 5.5")
+    trigger(w)
+    code(w, "Build request", J.INJ_REQUEST.replace("__PROMPT__", json.dumps(J.INJ_PROMPT)), 1)
+    http_messages(w, "Ask Claude", "https://api.anthropic.com/v1/messages", 2, cred="anthropicApi")
+    code(w, "Verdict", J.INJ_NORMALIZE, 3)
+    w.chain("Start", "Build request", "Ask Claude", "Verdict")
     return w
 
 
@@ -412,7 +430,7 @@ BUILDERS = [
     ("step-claim_intake", lambda: build_live_step("claim_intake", "claim intake")),
     ("step-ticket_triage", lambda: build_live_step("ticket_triage", "ticket triage")),
     ("step-lead_score", lambda: build_live_step("lead_score", "lead score")),
-    ("on-approved", build_on_approved), ("guard", build_guard), ("test-caller", build_test_caller),
+    ("on-approved", build_on_approved), ("injection-check", build_injection_check), ("guard", build_guard), ("test-caller", build_test_caller),
     ("review", build_review), ("report", build_report), ("reset", build_reset),
     ("fixkit-before", build_fixkit_before), ("fixkit-after", build_fixkit_after),
 ]

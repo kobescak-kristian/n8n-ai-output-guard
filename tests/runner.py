@@ -30,7 +30,9 @@ VALS = {s: jsonschema.Draft202012Validator(json.loads((ROOT / "tests" / "schemas
         for s in ("claim_intake", "ticket_triage", "lead_score")}
 
 MOCK = "http://127.0.0.1:8120"
+CLASSIFIER = {"on": False}  # --classifier: the guard also runs the AI injection check (option A, owner decision)
 NAMES = {"mock": "Q119 AI step: mock (simulated)", "on_approved": "Q119 Test: on_approved recorder",
+         "injection_check": "Q119 Injection check: Claude Haiku 5.5",
          "claim_intake": "Q119 AI step: claim intake (Claude)", "ticket_triage": "Q119 AI step: ticket triage (Claude)",
          "lead_score": "Q119 AI step: lead score (Claude)"}
 
@@ -99,7 +101,8 @@ def guard_input(c, schemas, ids, label):
     gi = {"task": c["step"], "ai_step_id": ids["mock"] if c["source"] == "simulated" else ids[c["step"]],
           "ai_input": {"text": c["input"]["text"]}, "schema": schema, "fallback": fb,
           "on_approved_id": ids["on_approved"],
-          "options": {"timeout_seconds": opts.get("timeout_seconds", 60), "max_tokens": opts.get("max_tokens")},
+          "options": {"timeout_seconds": opts.get("timeout_seconds", 60), "max_tokens": opts.get("max_tokens"),
+                      **({"injection_check_step_id": ids["injection_check"]} if CLASSIFIER["on"] else {})},
           "meta": {"case_id": c["id"], "run_label": label}}
     problem = opts.get("setup_problem")
     if problem == "schema_missing":
@@ -124,7 +127,9 @@ def main():
     ap.add_argument("--data", action="append")
     ap.add_argument("--ids", default="")
     ap.add_argument("--gap", type=float, default=1.2, help="seconds between cases (Slack posting limit)")
+    ap.add_argument("--classifier", action="store_true", help="also run the AI injection check (option A)")
     a = ap.parse_args()
+    CLASSIFIER["on"] = a.classifier
     files = [Path(p) for p in (a.data or [ROOT / "tests" / "cases" / "visible.json"])]
     cases = []
     for f in files:
