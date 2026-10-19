@@ -1,0 +1,4 @@
+# local secrets and run output; never commit
+.env
+__pycache__/
+tests/results/raw/
