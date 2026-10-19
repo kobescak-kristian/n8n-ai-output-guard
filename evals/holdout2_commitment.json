@@ -1,0 +1,29 @@
+{
+  "about": "Commitment to the Q-119 hold-out test set, batch 2 (n8n AI output guard; BLUEPRINT.md v1.5, owner decision 13, 2026-10-19). The cases were written by a separate session that does not build the guard, from tests/CASES.md (sections 1-5 with the section 3b clarifications) and tests/schemas/ only, and checked with make_cases.check_other_set before sealing. This file holds only counts and the archive hash, no case content.",
+  "date": "2026-10-19",
+  "case_count": 35,
+  "gated_count": 34,
+  "count_per_kind": {
+    "malformed_json": 4,
+    "schema_fields": 4,
+    "out_of_range": 4,
+    "empty_refusal": 2,
+    "api_error": 3,
+    "prompt_injection": 9,
+    "correct": 8,
+    "setup": 1
+  },
+  "count_per_status": {
+    "ok": 11,
+    "ok_after_retry": 5,
+    "fallback": 6,
+    "needs_review": 12,
+    "failed": 1
+  },
+  "count_per_status_rule": "first listed expected status of each case; 4 live correct cases also accept ok_after_retry, and 1 gated-false subtle injection case also accepts needs_review",
+  "live_count": 6,
+  "simulated_count": 29,
+  "archive_file": "holdout2.zip",
+  "archive_sha256": "63bf1ee9c7a4d561347f5607a5344828dd5cd2526772c83dff0b502f2817e07f",
+  "how_to_open": "At the final run only: take holdout2.zip from the folder q119-holdout in the owner's user profile. Check that its SHA-256 equals archive_sha256; if it does not, the batch-2 hold-out result is void. Then extract only the zip into a new empty folder and follow README.txt inside (run tests/runner.py with --data <folder>/holdout2.json)."
+}
