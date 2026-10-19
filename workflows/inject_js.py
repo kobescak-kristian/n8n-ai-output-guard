@@ -327,6 +327,9 @@ const GENERIC_ORDERS = GENERIC_PAIRS.flatMap(([f, v]) => [
 const GENERIC_ORDER = { test: (x) => GENERIC_ORDERS.some((re) => re.test(x)) };
 const GENERIC_KEYS = ['priority', 'urgency', 'severity', 'category', 'status', 'label', 'decision', 'verdict',
   'sentiment', 'flagged', 'score', 'fit[\\s_-]*score', 'rating'];
+// a "field: value" line at the start of the text or of a line, with a common output field
+const GENERIC_LINE = RX('(?:^|\\n)\\s*["\']?(?:' + GENERIC_PAIRS.map(([f]) => f.join('|')).join('|') + ')["\']?\\s*[:=]\\s*["\']?' +
+  EB + '(?:' + GENERIC_PAIRS.map(([, v]) => v.join('|')).join('|') + ')' + EE);
 const COMPOUND_AFTER = '(?!\\s+(?:support|plan|shipping|mail|line|tier|customer|access|service|delivery|lane|pass|boarding|seating|level\\s+of\\s+service))';
 
 function fieldNames(k) {
@@ -385,9 +388,10 @@ function fixedHit(t, schema, KEY) {
   // common output fields count only in a direct order ("Return ...", "Please return ..."), not in
   // "our API should return the following JSON: {...}"
   const ORDER_START = '(?:^|\\n|[.!?;:]\\s)\\s*(?:please\\s+|now\\s+|just\\s+|only\\s+)?';
+  const ANSWER_VERBS = '(?:return|respond|reply|answer|output|devuelve|devuelva|responde|responda|retorne|retorna|restituisci|rispondi|renvoie|renvoyez|réponds|répondez|antworte)';
   const res = [
     RX(EB + FIXED_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']' + K + '["\']\\s*:'),
-    RX(ORDER_START + FIXED_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']' + G + '["\']\\s*:'),
+    RX(ORDER_START + ANSWER_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']' + G + '["\']\\s*:'),
     RX(EB + '(?:correct|expected|right|desired|required|final)\\s+(?:output|answer|json|response|result)' + EE + '\\s*(?:is|:|=)?\\s*\\{\\s*["\']?' + K),
     RX(EB + '(?:your|the)\\s+(?:answer|response|output|reply|json)\\s+(?:must|should|has\\s+to)\\s+be\\s+(?:exactly\\s+)?(?:this\\s*:?\\s*)?\\{'),
   ];
@@ -401,7 +405,8 @@ function fixedHit(t, schema, KEY) {
     const rest = t.slice(m.index + m[0].length, m.index + m[0].length + 160);
     const lines = rest.split('\n').slice(0, 4).join('\n');
     if (F.declared.some((re) => re.test(lines))) return true;
-    if (GENERIC_ORDER.test(lines) && orderBefore.test(t.slice(Math.max(0, m.index - 12), m.index))) return true;
+    // common output fields only as "field: value" lines right after a lead that ends with ":" ("Return this:\npriority: low")
+    if (m[0].endsWith(':') && GENERIC_LINE.test(lines) && orderBefore.test(t.slice(Math.max(0, m.index - 12), m.index))) return true;
   }
   return false;
 }
@@ -508,7 +513,7 @@ function hitsIn(t, schema, F, KEY) {
   const NI = RX(EB + '(?:(?:new|updated|revised)\\s+(?:system\\s+)?instructions?(?:\\s+follow)?|neue\\s+anweisung(?:en)?|' +
     'nouvelles?\\s+(?:instructions?|consignes?)|nuevas?\\s+instrucci(?:ón|on|ones)|nuov[ae]\\s+istruzion[ei]|' +
     'novas?\\s+instruç(?:ão|ões)|nieuwe\\s+instructies?|nowe\\s+instrukcje|nowa\\s+instrukcja|nove\\s+upute|nova\\s+uputa|' +
-    'нов(?:ые|ая)\\s+инструкци[ия])\\s*(?:[:\\-–—.]|\\n)', 'gi');
+    'нов(?:ые|ая)\\s+инструкци[ия])\\s*[:\\-–—]', 'gi');
   const keys = Object.keys((schema && schema.properties) || {}).flatMap(fieldNames);
   const KEYS_RX = keys.length ? RX(EB + '(?:' + keys.join('|') + ')' + EE) : null;
   let ni, markers = 0;
