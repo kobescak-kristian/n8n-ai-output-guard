@@ -539,8 +539,10 @@ INJ_PROMPT = 'You screen text that customers send to a company (support tickets,
 
 INJ_REQUEST = r"""
 const it = $input.first().json || {};
+// the text cannot close the <<< >>> fence early: a run of 3 or more < or > gets spaces between its marks
+const fence = (x) => String(x || '').replace(/[<>]{3,}/g, (m) => m.split('').join(' '));
 return [{ json: { timeout_ms: (it.options || {}).timeout_ms || 20000, body: { model: 'claude-haiku-5-5', max_tokens: 1024,
-  system: __PROMPT__, messages: [{ role: 'user', content: 'Text to screen:\n<<<\n' + String(it.text || '') + '\n>>>' }],
+  system: __PROMPT__, messages: [{ role: 'user', content: 'Text to screen:\n<<<\n' + fence(it.text) + '\n>>>' }],
   output_config: { effort: 'low' } } } }];
 """
 

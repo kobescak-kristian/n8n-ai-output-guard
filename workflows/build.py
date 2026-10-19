@@ -480,6 +480,15 @@ def main():
     missing = set(CRED_NAMES) - set(creds)
     if missing:
         raise SystemExit("credentials missing in n8n: " + ", ".join(CRED_NAMES[m] for m in missing))
+    # existing q119_* data tables get any column that TABLES has and they lack (the setup workflow only
+    # creates missing tables; for example ai_check, added for decision 15)
+    tables = {t["name"]: t["id"] for t in api.list_all("/data-tables") if t.get("name") in TABLES}
+    for name, tid in tables.items():
+        have = {c["name"] for c in api.request("GET", f"/data-tables/{tid}/columns")}
+        for col, ty in TABLES[name]:
+            if col not in have:
+                api.request("POST", f"/data-tables/{tid}/columns", {"name": col, "type": ty})
+                print(f"added column {col} to {name}")
     wf_ids = {}
     for key, d in docs:
         wid = api.push(substitute(d, creds, wf_ids))

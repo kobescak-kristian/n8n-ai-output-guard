@@ -23,7 +23,8 @@ Signals (any one gives a hit):
   fixed answer      return/answer/use ... + a JSON object or "field: value" lines with schema keys
   addressed to AI   "Hey ChatGPT," / "ATTENTION AI:" / "Note to the AI:" + an order right after it
   comment to AI     <!-- ... assistant / AI / bot / LLM ... -->
-  new instructions  "new instructions:" + a schema field or an order
+  new instructions  "new instructions:" + a schema field, an order, or a common output field + value
+                    ("priority low") for any AI step
 """
 
 INJECT = r"""
@@ -300,6 +301,18 @@ const FIELD_TR = {
 const VALUE_TR = ['niedrig', 'hoch', 'dringend', 'basse', 'bas', 'haute', 'élevée', 'urgente', 'baja', 'alta', 'bassa',
   'baixa', 'laag', 'hoog', 'niski', 'wysoki', 'nizak', 'visok', 'низкий', 'высокий', 'срочный', 'normale', 'normal'];
 const NUM_WORDS = '(?:-?\\d+(?:[.,]\\d+)*|zero|one|two|three|four|five|ten|hundred|thousand|(?:one\\s+|a\\s+)?million|(?:one\\s+|a\\s+)?billion|null|none)';
+// after a "new instructions:" marker only: a field that AI outputs often have + a value, for any AI step
+// ("Neue Anweisungen: priority low" to a claim step); the customer's own new delivery instructions stay normal
+const GENERIC_PAIRS = [
+  [['priority', 'urgency', 'severity'].concat(FIELD_TR.priority, FIELD_TR.urgency),
+    ['low', 'high', 'medium', 'urgent', 'critical'].concat(VALUE_TR)],
+  [['category', 'status', 'label', 'decision', 'verdict', 'sentiment'].concat(FIELD_TR.category),
+    ['approved', 'rejected', 'spam', 'true', 'false', 'null']],
+  [['score', 'fit[\\s_-]*score', 'rating'], ['-?\\d+']],
+];
+const GENERIC_ORDERS = GENERIC_PAIRS.map(([f, v]) => RX(EB + '(?:' + f.join('|') + ')' + EE +
+  '\\s*(?:=|:|is|to|as|should\\s+be|must\\s+be)?\\s*["\']?' + EB + '(?:' + v.join('|') + ')' + EE));
+const GENERIC_ORDER = { test: (x) => GENERIC_ORDERS.some((re) => re.test(x)) };
 const COMPOUND_AFTER = '(?!\\s+(?:support|plan|shipping|mail|line|tier|customer|access|service|delivery|lane|pass|boarding|seating|level\\s+of\\s+service))';
 
 function fieldNames(k) {
@@ -473,7 +486,8 @@ function hitsIn(t, schema, F, KEY) {
   if (ni) {
     const rest = t.slice(ni.index, ni.index + 120);
     const keys = Object.keys((schema && schema.properties) || {}).flatMap(fieldNames);
-    if ((keys.length && RX(EB + '(?:' + keys.join('|') + ')' + EE).test(rest)) || isOrder(t.slice(ni.index + ni[0].length, ni.index + 160), F, KEY))
+    const after = t.slice(ni.index + ni[0].length, ni.index + 160);
+    if ((keys.length && RX(EB + '(?:' + keys.join('|') + ')' + EE).test(rest)) || isOrder(after, F, KEY) || GENERIC_ORDER.test(after))
       hits.push('new instructions');
   }
   return hits;

@@ -54,6 +54,8 @@ SCENARIOS = [
     ("529 then NO", [error(529), answer("NO")], "ok", False, 2, 0.9),
     ("429 retry-after 3 then YES", [error(429, {"retry-after": "3"}), answer("YES")], "needs_review", False, 2, 2.9),
     ("closed connection then NO", [CLOSE, answer("NO")], "ok", False, 2, 0.9),
+    ("429 retry-after 0 then NO", [error(429, {"retry-after": "0"}), answer("NO")], "ok", False, 2, None),
+    ("429 retry-after 2.5 then NO", [error(429, {"retry-after": "2.5"}), answer("NO")], "ok", False, 2, 2.4),
     ("stalled 25 s then NO", [stall(25, answer("NO")), answer("NO")], "ok", False, 2, 19.5),
     ("stalled twice", [stall(25, answer("NO")), stall(15, answer("NO"))], "needs_review", True, 2, 19.5),
     ("529 twice", [error(529), error(529)], "needs_review", True, 2, 0.9),

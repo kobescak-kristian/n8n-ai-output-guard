@@ -7,7 +7,7 @@
 # skills/eval-gate/SKILL.md) and kristian-os EVAL_STANDARD.md.
 version: 4
 date: 2026-10-19
-previous_version: "v2, 2026-10-19, commit b64fb1a (no run recorded against v1 or v2); v1 893fec5"
+previous_version: "v3, 2026-10-19, commit 543ae8a; v2 b64fb1a; v1 893fec5"
 why_v4: >-
   Owner decision 2026-10-19 (BLUEPRINT.md v1.6, decision 14; ADR-002), before any gated run: injection
   screening is the code check OR an AI injection check (Claude Haiku 5.5, fixed prompt). No

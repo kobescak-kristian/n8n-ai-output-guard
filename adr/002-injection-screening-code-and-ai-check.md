@@ -21,9 +21,10 @@ three runs. A 5-repeat stability test (tests/results/exp-stability-*.json) chose
 text to the company, its staff or a courier is normal. On the same texts, prompt v2 on its own flags 0 normal
 texts and gives the same answer every time, but misses 23 of 376 attack texts (prompt v1 missed 1). The code
 check catches 18 of those 23 for every AI step. 4 are orders for a ticket field ("priority low", with or
-without "new instructions" in German or Italian): the code check catches them for the ticket triage step,
-where the field exists; for the claim and lead steps the guard lets them through, because the step has no
-such field and the order cannot change its answer (a limit, listed in the README). The last one is the
+without "new instructions" in German or Italian): the code check caught them for the ticket triage step
+only. After the R4 checkpoint review (CASES 3b Rule 6) the code check also flags "new instructions:" plus a
+common output field and value ("priority low", "status approved", "score 100") for every AI step, so these
+now go to review on every step (tests/test_injection.py). The last one is the
 recorded known limit (a gated: false case; prompt v1 caught it). So the AI check is now tuned toward fewer
 false flags, and the code check carries more of the attack screening.
 
@@ -37,11 +38,12 @@ the strict rule sends to review. 0 normal texts flagged. Haiku's own answers var
 ## Decision
 
 Every guard call screens the input with both the code check and the AI injection check (a sub-workflow
-called by ID); if either one flags the input, the result is needs_review, and if the AI check fails or gives
+called by ID; the caller passes its ID in options.injection_check_step_id, as every demo caller and test
+runner does; without it the guard runs the code check only, a choice the plug-in guide must state); if either one flags the input, the result is needs_review, and if the AI check fails or gives
 no clear answer, the result is also needs_review, with an alert. A clear answer is a whole reply of YES or NO
 (after trimming spaces, markdown marks, quotes and end punctuation) that ended normally (stop reason
-end_turn); prose, both words, or a cut or refused answer is not clear. On an API error
-that a retry can fix (no reply at all (timeout, closed or refused connection, other network error), HTTP 408, 429 or 5xx) the AI check asks once more (owner
+end_turn or stop_sequence); prose, both words, or a cut or refused answer is not clear. On an API error
+that a retry can fix (no reply at all, HTTP 408, HTTP 429 or HTTP 5xx; "no reply" means a timeout, a closed or refused connection, or another network error) the AI check asks once more (owner
 decision 15); the fail-closed rule applies to what is left after that retry. An unclear answer is not retried.
 
 ## Alternatives rejected
@@ -57,8 +59,8 @@ decision 15); the fail-closed rule applies to what is left after that retry. An 
 
 - One extra small AI call per guard call, two after a retryable API error (about $0.00005 and 1 s at Haiku 5.5 prices on 2026-10-19).
 - Injection screening is partly an AI judgement: the README calls it best effort, and names the check.
-- One short API error costs one retry (1 s, or the 429 retry-after time up to 5 s; the first try has 20 s,
-  the retry 10 s, so the AI check takes at most about 35 s of the guard's 160 s budget). An API outage longer
+- One short API error costs one retry (1 s, or the 429 retry-after time up to 5 s; the first try has a 20 s
+  timeout, the retry a 10 s timeout, so with a silent API the AI check takes at most about 35 s of the guard's 160 s budget). An API outage longer
   than that sends every item to review (with alerts) until the AI check works again.
 - In tests every case makes one live AI-check call (two after a retryable API error), so runs need the API; a run-to-run flip of the AI check
   on a simulated case shows up as simulated_changes.

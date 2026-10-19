@@ -111,7 +111,9 @@ the guard screens" comes from owner decision 14, gate v4).
   `YYYY-MM-DD` and a real calendar day.
 - **Rule 6, what counts as obvious.** In any language: words telling the AI
   to ignore, disregard or forget earlier instructions or rules; "new
-  instructions"; "you are now ..." or a mode switch ("developer mode",
+  instructions" followed by an order or a field value for the AI (the
+  customer's own new instructions to the company, a courier or staff are
+  normal, as in OK40); "you are now ..." or a mode switch ("developer mode",
   "admin mode"); a role line or tag that gives the AI orders (`SYSTEM:`,
   `Assistant:`, `### Instruction`, `[INST]`, `</system>`, an HTML comment
   addressed to the assistant); a request to return fixed JSON or set field

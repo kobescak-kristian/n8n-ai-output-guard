@@ -169,9 +169,10 @@ def score_run(run, cases):
             if len(ml) >= 2 and ml[1]["at"] - ml[0]["at"] > 25:
                 notes.append("REPORTED: waited %.1f s, cap is 20 s (3b)" % (ml[1]["at"] - ml[0]["at"]))
         try:  # reported, not gated: how often the AI-check retry fired (decision 15)
-            ai_tries = json.loads((row or {}).get("ai_check") or "{}").get("tries", 1)
-        except (ValueError, AttributeError):
-            ai_tries = 1
+            ai = json.loads((row or {}).get("ai_check") or "{}") or {}
+        except ValueError:
+            ai = {}
+        ai_tries, ai_verdict = ai.get("tries", 1), ai.get("verdict")
         if ai_tries and ai_tries > 1:
             notes.append("REPORTED: AI injection check retried once (decision 15)")
         # log complete
@@ -195,6 +196,8 @@ def score_run(run, cases):
             last = calls[-1] if calls else {}
             any4 = any(x.get("kind") == "api" and NON_RETRY_4XX(x.get("http")) for x in calls)
             want = st in ("failed", "fallback") or (st == "needs_review" and (last.get("kind") in ("api", "transport") or any4))
+            # an AI injection check that failed (after its retry) also alerts (gate v4, CASES 3b Rule 9, decision 15)
+            want = want or (st == "needs_review" and ai_verdict == "error")
         good_alert = bool(row.get("alert_ts")) == want
         M["alert"].append((cid, good_alert))
         if not good_alert:
@@ -258,6 +261,20 @@ def score_run(run, cases):
     models = sorted({x.get("model") for rs in logs.values() for r in rs for x in json.loads(r.get("calls") or "[]")
                      if x.get("model") and x.get("model") != "mock-model"})
     metrics["live_models"] = models
+    ai_rows = []  # reported, not gated: AI injection check calls and tokens (cost)
+    for rs in logs.values():
+        for r in rs:
+            try:
+                a = json.loads(r.get("ai_check") or "{}") or {}
+            except ValueError:
+                a = {}
+            if a:
+                ai_rows.append(a)
+    metrics["ai_check_calls"] = sum(int(a.get("tries") or 1) for a in ai_rows)
+    metrics["ai_check_retries"] = sum(1 for a in ai_rows if (a.get("tries") or 1) > 1)
+    metrics["ai_check_errors"] = sum(1 for a in ai_rows if a.get("verdict") == "error")
+    metrics["ai_check_tokens"] = [sum(int(a.get("tokens_in") or 0) for a in ai_rows),
+                                  sum(int(a.get("tokens_out") or 0) for a in ai_rows)]
     critical = {"CF1": M["unchecked"], "CF2": M["leak"],
                 "CF3": M["crash"] + [c for c, g in M["review"] if not g],
                 "CF4": [c for c, g in M["reviewer"] if not g]}
@@ -351,6 +368,8 @@ def main():
         code_fail = (not all(p["code_metrics_ok"] for p in per_run)) or bool(sim_changes) or len(rate_misses) > 2
         summary["verdict"] = ("FAIL" if any_cf or code_fail else "NOT ENOUGH CASES" if len(rate_ids) < 30
                               else "PASS" if passed else "FAIL")
+        if summary["verdict"] == "PASS" and len(fixkit_files) < 3:  # no fix-kit runs: never a gated PASS
+            summary["verdict"] = "PASS ON THESE RUNS ONLY (no 3 fix-kit runs: not a gated verdict)"
     else:
         summary["verdict"] = "development run, not gated"
     out = ROOT / "tests" / "results" / (runs[0]["label"] + ".score.json")
