@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.3, 2026-10-19
+- Version: v1.4, 2026-10-19
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -149,6 +149,7 @@ Locked (owner, 2026-10-18 plan approval; change only by a dated line in 8.):
 9. Aim for one gated attempt (owner, 2026-10-19): portfolio builds should not show a series of gated FAILs. A gated FAIL still stays recorded (eval-gate rules 2-3); what changes is the work before the first gated run. Four checkpoints: R1 before P3, a fresh session red-teams the gate itself (unclear rules, expected results a correct guard could miss, a case wrong in itself); a wrong case is fixed only now, by recorded owner decision, before any result. R2 after P4, the visible set passes 3 full runs in a row at gate thresholds. R3 after R2, a fresh session that never builds and never sees the hold-out tries to break the guard on each CASES.md rule; every break becomes a new visible case (allowed before the run) and a fix of the cause. R4 the frozen commit gets a checkpoint review and a 2-case dry run. Only then P6. Why: on item 3 (Q-117) the hold-out found two workflow gaps the visible set did not cover, which cost two gated FAILs. Rejected: fewer recorded runs or hiding FAILs (not allowed); a looser gate (lowers the claim).
 10. Key and credential names `n8n-output-guard`, no backlog or item number (owner, 2026-10-19; see 3.).
 11. v1.3 update U1-U4 approved as proposed (owner, 2026-10-19; section "v1.3 update" below): U1 OK01-OK04 and OK07 accept ok or ok_after_retry, live alerts and retries scored against the logged API responses; U2 gate v3 grading notes, two new code metrics and the CASES.md clarifications; U3 hold-out conformance check by a session that never builds; U4 interaction sweep, generator self-check, written preflight.
+12. Red team after every build phase (owner, 2026-10-19): when a phase that builds or changes the automation closes (P3 guard build, P4 review/alerts/log, P5 fix kit, and any later fix of the automation), a fresh session that never builds and never opens the hold-out reviews what that phase built against tests/CASES.md (3 and 3b), the gate and ADR-001: rule breaks, validator differences from python jsonschema, injection phrasings missed or wrongly flagged, n8n wiring bugs, scorer bugs. Its report goes to the shared notes; findings are fixed (or recorded as known limits) before the next phase closes. This is in addition to R1-R4 (decision 9). First run: after P3, report q119-code-redteam.md.
 
 Open:
 - n8n slot: free now; Q-117 resumes 2026-10-20 08:00 and Q-119 pauses then until the owner hands n8n back — owner.
@@ -172,6 +173,7 @@ Builder work (no decision needed): about 25 new visible cases from R1 findings 2
 
 ## 8. Version log
 
+- v1.4 2026-10-19: owner decision: red team after every build phase (decision 12).
 - v1.3 2026-10-19: R1 red-team report + brainstorm additions: U1-U4 approved (decision 11).
 - v1.2 2026-10-19: owner requests: aim for one gated attempt (decision 9, phase P5b); key and credential names (decision 10).
 - v1.1 2026-10-19: owner decisions: Critical, safeguard line, gate v2 option A; LOCKED.
