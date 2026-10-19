@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.4, 2026-10-19
+- Version: v1.5, 2026-10-19
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -150,6 +150,7 @@ Locked (owner, 2026-10-18 plan approval; change only by a dated line in 8.):
 10. Key and credential names `n8n-output-guard`, no backlog or item number (owner, 2026-10-19; see 3.).
 11. v1.3 update U1-U4 approved as proposed (owner, 2026-10-19; section "v1.3 update" below): U1 OK01-OK04 and OK07 accept ok or ok_after_retry, live alerts and retries scored against the logged API responses; U2 gate v3 grading notes, two new code metrics and the CASES.md clarifications; U3 hold-out conformance check by a session that never builds; U4 interaction sweep, generator self-check, written preflight.
 12. Red team after every build phase (owner, 2026-10-19): when a phase that builds or changes the automation closes (P3 guard build, P4 review/alerts/log, P5 fix kit, and any later fix of the automation), a fresh session that never builds and never opens the hold-out reviews what that phase built against tests/CASES.md (3 and 3b), the gate and ADR-001: rule breaks, validator differences from python jsonschema, injection phrasings missed or wrongly flagged, n8n wiring bugs, scorer bugs. Its report goes to the shared notes; findings are fixed (or recorded as known limits) before the next phase closes. This is in addition to R1-R4 (decision 9). First run: after P3, report q119-code-redteam.md.
+13. Second sealed hold-out batch (owner, 2026-10-19): the visible additions of v2, v3 and the code red team lowered the hold-out share to 31 of 158 (20%), against about 30%; about 35 more hold-out cases are written by a separate session that never builds, from tests/CASES.md with section 3b and tests/schemas/ only, sealed as a second archive with its own committed SHA-256 commitment before any gated run (target: 66 of 193, about 34%). Both batches are opened only at the gated runs. Rejected: accepting 20% (weaker blind test), dropping visible cases (frozen).
 
 Open:
 - n8n slot: free now; Q-117 resumes 2026-10-20 08:00 and Q-119 pauses then until the owner hands n8n back — owner.
@@ -173,6 +174,7 @@ Builder work (no decision needed): about 25 new visible cases from R1 findings 2
 
 ## 8. Version log
 
+- v1.5 2026-10-19: owner decision: second sealed hold-out batch of about 35 cases (decision 13).
 - v1.4 2026-10-19: owner decision: red team after every build phase (decision 12).
 - v1.3 2026-10-19: R1 red-team report + brainstorm additions: U1-U4 approved (decision 11).
 - v1.2 2026-10-19: owner requests: aim for one gated attempt (decision 9, phase P5b); key and credential names (decision 10).

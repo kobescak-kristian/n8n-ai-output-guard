@@ -51,7 +51,8 @@
      "waitForSubWorkflow": true
     }
    },
-   "onError": "continueRegularOutput"
+   "onError": "continueRegularOutput",
+   "alwaysOutputData": true
   },
   {
    "id": "6ee86636-e500-5174-83b5-f44cbb1056e5",

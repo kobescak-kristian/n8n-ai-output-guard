@@ -34,6 +34,19 @@ def load_cases(files):
     return cases
 
 
+def same(a, b):
+    """data_equality policy: deep equality, numbers by value, but a boolean never equals a number."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
+    return type(a) is type(b) and a == b
+
+
 def ratio(good, total):
     return None if total == 0 else round(good / total, 4)
 
@@ -45,6 +58,10 @@ def ref_object(text):
     except ValueError:
         return None
     return v if isinstance(v, dict) else None
+
+
+def is_rate_case(c):
+    return c["source"] == "live" and c["kind"] == "correct" and c.get("gated", True)
 
 
 def score_run(run, cases):
@@ -75,9 +92,13 @@ def score_run(run, cases):
         resp = run["results"].get(cid, {}).get("response")
         res = resp.get("result") if isinstance(resp, dict) else None
         notes = []
-        if not isinstance(res, dict) or "status" not in res or run["results"][cid].get("http") != 200:
+        if (not isinstance(res, dict) or "status" not in res or run["results"][cid].get("http") != 200
+                or (run["results"][cid].get("seconds") or 0) > 180):
             M["crash"].append(cid)
-            per_case[cid] = {"status": None, "notes": ["no guard result (caller crash)"]}
+            if is_rate_case(c):
+                M["rate"].append((cid, False))
+            per_case[cid] = {"status": None, "notes": ["no guard result within 180 s (caller crash, CF3)"],
+                             "simulated": c["source"] == "simulated", "gated": gated}
             continue
         st, data = res["status"], res.get("data")
         rows = logs.get(cid, [])
@@ -86,7 +107,7 @@ def score_run(run, cases):
         main = [x for x in calls if x.get("role") == "main"]
         second = [x for x in calls if x.get("role") == "second"]
         v = VALS[c["step"]]
-        is_rate = c["source"] == "live" and c["kind"] == "correct" and gated
+        is_rate = is_rate_case(c)
 
         # CF1 unchecked data
         if st in ("ok", "ok_after_retry", "fallback") and (data is None or not v.is_valid(data)):
@@ -97,9 +118,9 @@ def score_run(run, cases):
         # untouched data
         if st in ("ok", "ok_after_retry"):
             last = main[-1] if main else {}
-            good = data == ref_object(last.get("raw"))
+            good = same(data, ref_object(last.get("raw")))
             if c["source"] == "simulated" and isinstance(e.get("data"), dict):
-                good = good and data == e["data"]
+                good = good and same(data, e["data"])
             M["untouched"].append((cid, good))
             if not good:
                 notes.append("data changed")
@@ -174,14 +195,14 @@ def score_run(run, cases):
                 good = not got and q.get("status") == "rejected"
             elif ra["action"] == "correct":
                 if v.is_valid(ra["data"]):
-                    good = len(got) == 1 and json.loads(got[0]["data"]) == ra["data"] and q.get("status") == "corrected"
+                    good = len(got) == 1 and same(json.loads(got[0]["data"]), ra["data"]) and q.get("status") == "corrected"
                 else:
                     good = not got and q.get("status") == "pending"
             else:
                 passed = [x for x in main if x.get("pass")]
                 if passed:
                     want_data = ref_object(passed[-1]["raw"])
-                    good = len(got) == 1 and json.loads(got[0]["data"]) == want_data and q.get("status") == "approved"
+                    good = len(got) == 1 and same(json.loads(got[0]["data"]), want_data) and q.get("status") == "approved"
                 else:
                     good = not got and q.get("status") == "pending"
             if ra.get("repeat", 1) == 2:
@@ -192,8 +213,8 @@ def score_run(run, cases):
                 notes.append("CF4 review outcome wrong")
         # fallback data, null data
         if st == "fallback" and isinstance(e.get("data"), dict):
-            M["fallback_data"].append((cid, data == e["data"]))
-            if data != e["data"]:
+            M["fallback_data"].append((cid, same(data, e["data"])))
+            if not same(data, e["data"]):
                 notes.append("fallback data differs")
         if st in ("needs_review", "failed"):
             M["null_data"].append((cid, data is None))
@@ -221,6 +242,9 @@ def score_run(run, cases):
         "null_data_on_review": frac("null_data"), "status_accuracy_code": frac("status_code"),
         "rate_cases": len(M["rate"]), "rate_passes_this_run": sum(1 for _, g in M["rate"] if g),
     }
+    models = sorted({x.get("model") for rs in logs.values() for r in rs for x in json.loads(r.get("calls") or "[]")
+                     if x.get("model") and x.get("model") != "mock-model"})
+    metrics["live_models"] = models
     critical = {"CF1": M["unchecked"], "CF2": M["leak"],
                 "CF3": M["crash"] + [c for c, g in M["review"] if not g],
                 "CF4": [c for c, g in M["reviewer"] if not g]}
@@ -260,7 +284,12 @@ def main():
     if len(runs) >= 3:
         passed = (all(p["critical_failures"] == 0 and p["code_metrics_ok"] for p in per_run)
                   and not sim_changes and len(rate_ids) >= 30 and len(rate_misses) <= 2)
-        summary["verdict"] = ("NOT ENOUGH CASES" if len(rate_ids) < 30 else "PASS" if passed else "FAIL")
+        any_cf = any(p["critical_failures"] for p in per_run)
+        same_model = len({m for p in per_run for m in p["metrics"]["live_models"]}) <= 1
+        passed = passed and same_model
+        summary["same_live_model"] = same_model
+        summary["verdict"] = ("FAIL" if any_cf else "NOT ENOUGH CASES" if len(rate_ids) < 30
+                              else "PASS" if passed else "FAIL")
     else:
         summary["verdict"] = "development run, not gated"
     out = ROOT / "tests" / "results" / (runs[0]["label"] + ".score.json")

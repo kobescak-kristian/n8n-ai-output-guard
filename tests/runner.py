@@ -23,6 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 from n8n_api import Api, load_env  # noqa: E402
+import jsonschema  # noqa: E402
+
+VALS = {s: jsonschema.Draft202012Validator(json.loads((ROOT / "tests" / "schemas" / f"{s}.json").read_text(encoding="utf-8")),
+                                           format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER)
+        for s in ("claim_intake", "ticket_triage", "lead_score")}
 
 MOCK = "http://127.0.0.1:8120"
 NAMES = {"mock": "Q119 AI step: mock (simulated)", "on_approved": "Q119 Test: on_approved recorder",
@@ -48,18 +53,32 @@ def http(method, url, body=None, form=None, timeout=60):
 
 
 def mock_up():
-    s, _ = http("GET", MOCK + "/health", timeout=3)
-    return s == 200
+    s, r = http("GET", MOCK + "/health", timeout=3)
+    return r.get("cases") if s == 200 and isinstance(r, dict) else None
+
+
+def script_count(files):
+    n = 0
+    for f in files:
+        doc = json.loads(Path(f).read_text(encoding="utf-8"))
+        for c in doc["cases"] if isinstance(doc, dict) else doc:
+            if c.get("source") == "simulated":
+                n += 1 + ((c.get("fallback") or {}).get("mode") == "second_step")
+    return n
 
 
 def ensure_mock(files):
-    if mock_up():
+    running = mock_up()
+    if running is not None:
+        if running != script_count(files):
+            raise SystemExit("a mock AI server is already running with %s scripts, but these case files need %s: "
+                             "stop it first" % (running, script_count(files)))
         return None
     p = subprocess.Popen([sys.executable, "-I", str(ROOT / "tests" / "mock_server.py"), *map(str, files)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         time.sleep(0.2)
-        if mock_up():
+        if mock_up() is not None:
             return p
     raise SystemExit("mock AI server did not start")
 
@@ -85,6 +104,10 @@ def guard_input(c, schemas, ids, label):
         gi["ai_step_id"] = "Q119doesNotExist"
     elif problem == "input_missing":
         gi["ai_input"] = None
+    elif problem == "fallback_invalid" and not (
+            fb.get("mode") == "default" and isinstance(fb.get("value"), dict)
+            and not VALS[c["step"]].is_valid(fb["value"])):
+        gi["fallback"] = {"mode": "default", "value": {}}  # an empty object fails "required"
     return gi
 
 

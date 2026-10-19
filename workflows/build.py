@@ -90,7 +90,7 @@ def trigger(w, x=0):
 def call(w, name, id_expr, x, y=0):
     return w.add(name, "n8n-nodes-base.executeWorkflow", 1.4, {
         "source": "database", "workflowId": {"__rl": True, "mode": "id", "value": id_expr},
-        "options": {"waitForSubWorkflow": True}}, x, y, onError="continueRegularOutput")
+        "options": {"waitForSubWorkflow": True}}, x, y, onError="continueRegularOutput", alwaysOutputData=True)
 
 
 def table(name):

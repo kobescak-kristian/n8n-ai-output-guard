@@ -10,7 +10,7 @@ have caught. Source: BLUEPRINT.md v1.3, U4.3.
 | # | Check | How | OK when |
 |---|---|---|---|
 | 1 | n8n is ours for the whole series | owner says so; shared notes `n8n-usage.md` | no other build's test run is planned in the window; our line is added there |
-| 2 | Mock AI server up | `GET http://localhost:8120/health` | HTTP 200 |
+| 2 | Mock AI server | no mock server left running from an earlier run (the runner starts its own with the right case files and stops if one with other scripts is running) | `GET http://localhost:8120/health` fails before the run |
 | 3 | Anthropic credential valid | one live call through the AI step | answer received; key expiry date (30-day key from 2026-10-19) is after the series ends |
 | 4 | Slack bot can post | one test message to #ai-review through `Slack n8n-output-guard` | message ts returned; bot is a member of #ai-review |
 | 5 | Slack posting limit | count review messages + alerts this series will post (from the case list) | runner spacing keeps it at or under about 1 message per second per channel; guard retries Slack 429 with Retry-After |
