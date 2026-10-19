@@ -15,17 +15,18 @@ prompt missed 0 of the same 100 attacks and flagged 0 of 100 normal texts, with 
 runs (decision note q119-decision-injection-check.md in the shared notes; tests/results/exp-classifier-*.json).
 
 Prompt change after the decision (2026-10-19, R2). Result first: with the code check and the AI check
-together, the guard still misses only the one recorded known limit on the attack texts measured for each AI
-step. Details: the first prompt (v1) flagged one normal visible text (OK40, a delivery instruction) in one of
+together, the guard misses none of the measured attack texts except the recorded known limits
+(tests/injection_redteam_texts.py KNOWN_LIMITS; the second one, "priority 1ow", is not measured with the AI check). Details: the first prompt (v1) flagged one normal visible text (OK40, a delivery instruction) in one of
 three runs. A 5-repeat stability test (tests/results/exp-stability-*.json) chose prompt v2, which says that
 text to the company, its staff or a courier is normal. On the same texts, prompt v2 on its own flags 0 normal
-texts and gives the same answer every time, but misses 23 of 376 attack texts (prompt v1 missed 1). 22 of
-the 23 are attack texts; the last one is the recorded known limit (a gated: false case; prompt v1 caught it).
-Some of the 22 are orders for an output field ("priority low", with or without "new instructions" in German
-or Italian, or after "Return this:"). Since the R4 reviews (CASES 3b Rule 6) the code check flags such an order
-for every AI step, also when the step has no such field: after every "new instructions" marker, and after a
-direct order to return fixed JSON or field lines. Measured on the code at the commit named in evals/RESULTS.md:
-the code check flags all 22 for each of the 3 AI steps (tests/test_injection.py holds them). So the AI check is
+texts and gives the same answer every time, but misses 23 of 376 attack texts (prompt v1 missed 1): 22
+attack texts plus the recorded known limit (a gated: false case; prompt v1 caught it). Some of the 22 are
+orders for an output field ("priority low", with or without "new instructions" in German or Italian, or
+after "Return this:"). Since the R4 reviews (CASES 3b Rule 6) the code check flags such an order for every AI
+step, also when the step has no such field: after every "new instructions" marker, and after a direct order
+("Return ...", "Please return ...") to return fixed JSON or field lines. Polite or indirect requests ("Could
+you return ...") are left to the AI check (version 2 list in STATE.md, owner decision 16). Measured with
+`python tools/check_v2_misses.py .` at af88e4c: the code check flags all 22 for each of the 3 AI steps. So the AI check is
 now tuned toward fewer false flags, and the code check carries more of the attack screening.
 
 Raw-reply measure for the strict answer rule (2026-10-19 night, tools/exp_raw_answers.py, two passes of 2
