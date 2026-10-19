@@ -30,7 +30,7 @@ VALS = {s: jsonschema.Draft202012Validator(json.loads((ROOT / "tests" / "schemas
         for s in ("claim_intake", "ticket_triage", "lead_score")}
 
 MOCK = "http://127.0.0.1:8120"
-CLASSIFIER = {"on": False}  # --classifier: the guard also runs the AI injection check (option A, owner decision)
+CLASSIFIER = {"on": True}  # the guard also runs the AI injection check (owner decision 14); --no-classifier turns it off
 NAMES = {"mock": "Q119 AI step: mock (simulated)", "on_approved": "Q119 Test: on_approved recorder",
          "injection_check": "Q119 Injection check: Claude Haiku 5.5",
          "claim_intake": "Q119 AI step: claim intake (Claude)", "ticket_triage": "Q119 AI step: ticket triage (Claude)",
@@ -127,9 +127,10 @@ def main():
     ap.add_argument("--data", action="append")
     ap.add_argument("--ids", default="")
     ap.add_argument("--gap", type=float, default=1.2, help="seconds between cases (Slack posting limit)")
-    ap.add_argument("--classifier", action="store_true", help="also run the AI injection check (option A)")
+    ap.add_argument("--no-classifier", action="store_true", help="code check only, without the AI injection check")
+    ap.add_argument("--classifier", action="store_true", help="(default) kept for older commands")
     a = ap.parse_args()
-    CLASSIFIER["on"] = a.classifier
+    CLASSIFIER["on"] = not a.no_classifier
     files = [Path(p) for p in (a.data or [ROOT / "tests" / "cases" / "visible.json"])]
     cases = []
     for f in files:

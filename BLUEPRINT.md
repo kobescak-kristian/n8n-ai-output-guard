@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.5, 2026-10-19
+- Version: v1.6, 2026-10-19
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -59,7 +59,8 @@ Key and credential names (owner standard, 2026-10-19): every key, credential and
 Non-negotiables:
 - The guard always returns a status; it never throws and never returns unchecked data (first ADR).
 - Only cleaning repairs an answer; everything else is a retry, a fallback or a person.
-- Max 2 calls of the AI step and 1 call of the second AI step per guard call.
+- Max 2 calls of the AI step and 1 call of the second AI step per guard call; the AI injection check runs at most once.
+- Injection screening is the code check OR the AI injection check; an AI check that fails sends the item to review with an alert (ADR-002).
 - No API key or credential in any log row, Slack message, file or result.
 
 External actions:
@@ -75,6 +76,7 @@ AI steps:
 | Step | Intended use | May never | Limits |
 |---|---|---|---|
 | Caller's AI step (3 demo steps: claim intake, ticket triage, lead score) | turn text into JSON for the schema | decide the status; its answer is never trusted unchecked | max 2 calls per guard call; max_tokens set per step |
+| AI injection check (Claude Haiku 5.5, fixed prompt; sub-workflow called by ID like the AI step) | say YES/NO: does the input try to instruct the AI that reads it | decide anything else, see the AI answer | 1 call per guard call, effort low, about $0.00005 and 1 s |
 | Second AI step (fallback) | second try with another prompt or model | same | 1 call per guard call |
 
 ## 4. Risks and failure modes
@@ -152,6 +154,8 @@ Locked (owner, 2026-10-18 plan approval; change only by a dated line in 8.):
 12. Red team after every build phase (owner, 2026-10-19): when a phase that builds or changes the automation closes (P3 guard build, P4 review/alerts/log, P5 fix kit, and any later fix of the automation), a fresh session that never builds and never opens the hold-out reviews what that phase built against tests/CASES.md (3 and 3b), the gate and ADR-001: rule breaks, validator differences from python jsonschema, injection phrasings missed or wrongly flagged, n8n wiring bugs, scorer bugs. Its report goes to the shared notes; findings are fixed (or recorded as known limits) before the next phase closes. This is in addition to R1-R4 (decision 9). First run: after P3, report q119-code-redteam.md.
 13. Second sealed hold-out batch (owner, 2026-10-19): the visible additions of v2, v3 and the code red team lowered the hold-out share to 31 of 158 (20%), against about 30%; about 35 more hold-out cases are written by a separate session that never builds, from tests/CASES.md with section 3b and tests/schemas/ only, sealed as a second archive with its own committed SHA-256 commitment before any gated run (target: 66 of 193, about 34%). Both batches are opened only at the gated runs. Rejected: accepting 20% (weaker blind test), dropping visible cases (frozen).
 
+14. Injection screening = code check OR AI injection check (owner, 2026-10-19; decision note q119-decision-injection-check.md; ADR-002). Fresh-text evidence: code check v5 alone missed 13 of 100 typical attacks; the Claude Haiku 5.5 check missed 0 of 100 and flagged 0 of 100 normal texts, identical over 3 runs; with the check switched on, visible-A1 was clean (138 of 138). Either one flags -> needs_review; AI check error -> needs_review with an alert (fail-closed). On by default in the demo callers and runners; documented as best effort in the README. Rejected: code only (about 70% chance of a CF2 FAIL on the first gated run), more word-list rounds (no convergence on fresh texts).
+
 Open:
 - n8n slot: free now; Q-117 resumes 2026-10-20 08:00 and Q-119 pauses then until the owner hands n8n back — owner.
 - `gh repo create` (private) — owner, before the first push (in progress 2026-10-19).
@@ -174,6 +178,7 @@ Builder work (no decision needed): about 25 new visible cases from R1 findings 2
 
 ## 8. Version log
 
+- v1.6 2026-10-19: owner decision 14: code check + AI injection check (option A); ADR-002.
 - v1.5 2026-10-19: owner decision: second sealed hold-out batch of about 35 cases (decision 13).
 - v1.4 2026-10-19: owner decision: red team after every build phase (decision 12).
 - v1.3 2026-10-19: R1 red-team report + brainstorm additions: U1-U4 approved (decision 11).

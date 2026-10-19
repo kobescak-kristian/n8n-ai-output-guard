@@ -131,6 +131,12 @@ expected result (source: R1 red-team report, 2026-10-19).
   pending and on_approved is not called. Once an item is approved,
   corrected or rejected, a second action on it is refused: on_approved is
   called at most once per item.
+- **Rule 6, how the guard screens (gate v4, owner decision 2026-10-19).** The
+  input is screened by a code check and by an AI injection check (a small
+  AI step that answers YES or NO). Either one flagging is enough. If the AI
+  check fails (API error, no clear answer), the item goes to review with an
+  alert. Expected results of the cases do not change: obvious injections
+  are needs_review, normal text is not flagged.
 - **Rule 9, alert for needs_review.** Alert when the last call (of the main
   AI step, or of the second AI step when it ran last) ended in an HTTP
   error, a timeout or a closed connection, or when any call returned a 4xx

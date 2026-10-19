@@ -24,9 +24,9 @@ def main():
     ap.add_argument("--label", required=True)
     ap.add_argument("--data", action="append")
     ap.add_argument("--gap", type=float, default=1.2)
-    ap.add_argument("--classifier", action="store_true", help="also run the AI injection check (option A)")
+    ap.add_argument("--no-classifier", action="store_true", help="code check only, without the AI injection check")
     a = ap.parse_args()
-    R.CLASSIFIER["on"] = a.classifier
+    R.CLASSIFIER["on"] = not a.no_classifier
     files = [Path(p) for p in (a.data or [ROOT / "tests" / "cases" / "visible.json"])]
     cases = []
     for f in files:
