@@ -37,7 +37,7 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function normText(t) {
   let s = String(t).normalize('NFKC');
-  s = s.replace(/[\u00ad\u200b-\u200d\u2060\ufeff]/g, '');
+  s = s.replace(/\p{Cf}/gu, '');
   s = s.replace(/[\u2028\u2029\u0085\u000b\u000c]/g, '\n').replace(/\r/g, '');
   s = s.replace(/<\/?(?:b|i|u|s|strong|em|span|font|p|div|br|small|big|mark)(?:\s[^<>]{0,60})?\/?>/gi, ' ');
   s = s.replace(/[*`]+/g, '').replace(/_{2,}/g, ' ');
@@ -51,17 +51,18 @@ const HOMO = { 'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y',
   'ԁ': 'd', 'ɡ': 'g', 'ο': 'o', 'ι': 'i', 'α': 'a', 'ν': 'v', 'ρ': 'p', 'τ': 't', 'κ': 'k',
   'А': 'A', 'В': 'B', 'Е': 'E', 'І': 'I', 'К': 'K', 'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T',
   'Х': 'X', 'Ј': 'J', 'Ѕ': 'S', 'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ι': 'I', 'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O',
-  'Ρ': 'P', 'Τ': 'T', 'Χ': 'X', 'Υ': 'Y', 'Ζ': 'Z' };
-const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's' };
+  'Ρ': 'P', 'Τ': 'T', 'Χ': 'X', 'Υ': 'Y', 'Ζ': 'Z', 'օ': 'o', 'ս': 'u', 'ց': 'g', 'ո': 'n', 'հ': 'h', 'ք': 'p',
+  'ա': 'w', 'Օ': 'O', 'Ս': 'U' };
+const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i', '|': 'l' };
 // undo common disguises: look-alike letters inside Latin words, digits as letters, spaced-out letters
 function skeleton(t) {
-  let s = t.replace(/[\p{L}\p{N}@$]+/gu, (w) => {
-    if (/\p{Script=Latin}/u.test(w) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(w)) w = [...w].map((c) => HOMO[c] || c).join('');
-    if (/\p{Script=Latin}/u.test(w) && /[\d@$]/.test(w) && /^[\p{Script=Latin}\d@$]+$/u.test(w) && /\p{L}.*\p{L}/u.test(w))
-      w = w.replace(/[013457@$]/g, (c) => LEET[c]);
+  let s = t.replace(/[\p{L}\p{N}@$!|]+/gu, (w) => {
+    if (/\p{Script=Latin}/u.test(w) && /[\p{Script=Cyrillic}\p{Script=Greek}\p{Script=Armenian}]/u.test(w)) w = [...w].map((c) => HOMO[c] || c).join('');
+    if (/[\d@$!|]/.test(w) && /^[\p{Script=Latin}\d@$!|]+$/u.test(w) && /\p{L}.*\p{L}/u.test(w))
+      w = w.replace(/[013457@$!|]/g, (c) => LEET[c]);
     return w;
   });
-  s = s.replace(/(?<![\p{L}\p{N}])(?:\p{L} ){3,}\p{L}(?![\p{L}\p{N}])/gu, (m) => m.replace(/ /g, ''));
+  s = s.replace(/(?<![\p{L}\p{N}])(?:\p{L}[ .\-_]){3,}\p{L}(?![\p{L}\p{N}])/gu, (m) => m.replace(/[ .\-_]/g, ''));
   return s;
 }
 
@@ -90,6 +91,7 @@ const IMP = ['set', 'put', 'mark', 'make', 'change', 'classify', 'categori[sz]e'
   'установи', 'поставь', 'отметь', 'измени', 'ответь', 'игнорируй', 'забудь', 'используй', 'присвой', 'закрой',
   'одобри', 'удали', 'верни',
   'ustaw', 'oznacz', 'zmień', 'odpowiedz', 'zignoruj', 'zapomnij', 'zamknij', 'zatwierdź', 'usuń',
+  'aseta', 'merkitse', 'anna', 'sulje', 'hyväksy',
   'postavi', 'postavite', 'označi', 'označite', 'promijeni', 'odgovori', 'zanemari', 'zaboravi', 'zatvori', 'odobri', 'obriši', 'izbriši'];
 const IMP_START = RX('^\\s*(?:please\\s+|kindly\\s+|now\\s+|bitte\\s+|merci de\\s+|por favor,?\\s+|per favore,?\\s+)?' + word(IMP) + '(?:\\s+(\\S+))?');
 const OBJECT_WORDS = /^(?:This|It|That|The|All|Every|Each|These|Those|Priority|Urgency|Category|Me|Us|Dieses|Diesen|Ce|Cette|Este|Esta|Questo|Questa)$/;
@@ -97,6 +99,7 @@ function startsWithOrder(s) {
   const m = IMP_START.exec(s);
   if (!m) return false;
   const next = m[1] || '';
+  if (/^(?:my|our|me|us|mein\p{L}*|unser\p{L}*|mon|ma|mes|notre|nos|mi|mis|nuestr\p{L}*|il\s+mio|mio|mia|meu|minha|мой|мою|мои|moj\p{L}*)$/iu.test(next)) return false;
   return !(/^\p{Lu}\p{Ll}/u.test(next) && !OBJECT_WORDS.test(next.replace(/[^\p{L}]/gu, '')));
 }
 
@@ -110,7 +113,8 @@ const IGNORE = [
    ['all', 'any', 'and', 'every', 'each', 'the', 'your', 'previous', 'prior', 'above', 'earlier', 'preceding',
     'original', 'initial', 'system', 'of', 'these', 'those', 'what', 'you', 'were', 'have', 'been', 'given', 'told',
     'before', 'old', 'existing', 'current', 'safety', 'default', 'other', 'scoring', 'triage', 'internal', 'core',
-    'base', 'hidden', 'developer', 'operator', 'standard', 'normal', 'usual', 'got', 'received'],
+    'base', 'hidden', 'developer', 'operator', 'standard', 'normal', 'usual', 'got', 'received', 'single', 'one',
+    'last'],
    ['instructions?', 'rules?', 'prompts?', 'guidelines?', 'directions?', 'directives?', 'commands?', 'guidance',
     'programming', 'guardrails?', 'restrictions?', 'system prompt', 'policies', 'policy', 'text above',
     'messages? above', 'previous messages?', 'everything above', 'context', 'orders?', 'training', 'constraints?']],
@@ -140,7 +144,7 @@ const IGNORE = [
    ['instruções', 'instrucoes', 'regras', 'orientações', 'comandos']],
   [['negeer', 'vergeet'], ['alle', 'de', 'je', 'jouw', 'vorige', 'eerdere', 'voorgaande', 'bovenstaande'],
    ['instructies', 'regels', 'opdrachten', 'aanwijzingen']],
-  [['zignoruj', 'ignoruj', 'zapomnij', 'zapomnij o'],
+  [['zignoruj', 'ignoruj', 'zapomnij', 'zapomnij o', 'nie stosuj się do', 'nie przestrzegaj'],
    ['wszystkie', 'wszystkich', 'poprzednie', 'poprzednich', 'wcześniejsze', 'wcześniejszych', 'powyższe', 'swoje'],
    ['instrukcje', 'instrukcjach', 'instrukcji', 'polecenia', 'poleceniach', 'zasady', 'reguły', 'wytyczne']],
   [['zanemari', 'zanemarite', 'ignoriraj', 'ignorirajte', 'ignoriši', 'zaboravi', 'zaboravite'],
@@ -184,7 +188,10 @@ const IGNORE_EXTRA = [
   RX('(?:पिछले|सभी|पूर्व|पहले)[^।.\\n]{0,20}(?:निर्देशों|निर्देश)[^।.\\n]{0,20}(?:अनदेखा|नज़रअंदाज़|नजरअंदाज|भूल)'),
   RX('(?:이전|위의|앞의|모든)?\\s*(?:의\\s*)?(?:지시사항|지시|지침|명령|규칙)(?:를|을|은|는)?\\s*(?:모두\\s*)?(?:무시|잊어)'),
   RX('(?:忽略|无视|忘记|忘掉|忽視|無視|忘記|不要理会|不要理睬|别管|別管|不要理會)(?:掉)?(?:之前|以上|前面|先前|上面|上述)?(?:的)?(?:所有|全部)?(?:的)?(?:指令|指示|说明|說明|规则|規則|提示|系统提示|系統提示)'),
-  RX('(?:以前|これまで|上記|前|上)の(?:すべての|全ての)?(?:指示|命令|ルール|指令)(?:は|を)(?:すべて|全て)?(?:無視|忘れ)'),
+  RX('(?:以前|これまで|今まで|上記|前|上)の(?:すべての|全ての)?(?:指示|命令|ルール|指令)(?:は|を)(?:すべて|全て)?(?:無視|忘れ)'),
+  RX('把(?:之前|以上|前面|先前|上面|上述)?的?(?:所有|全部)?的?(?:指令|指示|说明|說明|规则|規則|提示)(?:都|全)?(?:忘了|忘掉|忘记|忽略|无视|無視)'),
+  RX('(?:لا\\s+تتبع|لا\\s+تلتزم\\s+ب)\\s*(?:كل\\s+|جميع\\s+)?(?:التعليمات|الأوامر|القواعد)'),
+  RX(EB + '(?:the\\s+|all\\s+)?(?:rules|instructions|guidelines)\\s+(?:above|before)\\s+(?:are|have\\s+been)\\s+(?:now\\s+)?(?:cancell?ed|void|revoked|deleted|no\\s+longer\\s+valid)' + EE),
   RX('התעל[םמ][יו]?\\s+מ(?:כל\\s+)?ה?(?:הוראות|הנחיות|כללים)'),
   RX('(?:เพิกเฉย|ไม่ต้องสนใจ|ละเว้น|ลืม)(?:ต่อ)?\\s*(?:คำสั่ง|คำแนะนำ|กฎ)'),
   RX('(?:دستورالعمل|دستورات|قوانین)[^.\\n]{0,40}(?:نادیده\\s*بگیر|فراموش\\s*کن)'),
@@ -192,27 +199,30 @@ const IGNORE_EXTRA = [
   RX('(?:নির্দেশনা|নির্দেশ)[^।.\\n]{0,30}(?:উপেক্ষা|ভুলে)'),
 ];
 const FIRST_PERSON_I = /(?<![\p{L}\p{N}_])I(?:'m|'ll|'ve|'d)?(?![\p{L}\p{N}_])/u;
-const FIRST_PERSON = RX(EB + "(?:i'm|i'll|i've|me|my|we|we're|we'll|our|ich|mir|mein\\p{L}*|wir|je|j'|me|mon|ma|mes|nous|yo|mi|mis|estaré|estoy|io|mio|mia|sono|sarò|eu|meu|minha|estarei|я|мне|мой|ja|moj\\p{L}*)" + EE);
+const FIRST_PERSON = RX(EB + "(?:i'm|i'll|i've|me|my|we|we're|we'll|our|ich|mir|mein\\p{L}*|wir|je|j'|me|mon|ma|mes|nous|yo|mi|mis|estaré|estoy|io|mio|mia|sono|sarò|eu|meu|minha|estarei|я|мне|мой|moj\\p{L}*)" + EE);
+const AUTHORITY = RX(EB + "(?:i\\s+am|i'm|we\\s+are|we're|ich\\s+bin|wir\\s+sind|je\\s+suis|nous\\s+sommes|yo\\s+soy|soy|somos|io\\s+sono|sono|eu\\s+sou|sou|ja\\s+sam|jestem|я)\\s+(?:the\\s+|your\\s+|dein\\p{L}*\\s+|ton\\s+|votre\\s+|tu\\s+|el\\s+|il\\s+|tuo\\s+|o\\s+|tvoj\\p{L}*\\s+|twoim\\s+|ваш\\p{L}*\\s+|твой\\s+)?(?:system\\s+)?(?:admin\\p{L}*|developer\\p{L}*|entwickler\\p{L}*|développeur|desarrollador|sviluppatore|desenvolvedor|programer\\p{L}*|operator\\p{L}*|owner|creator|boss|ceo|manager|supervisor|root|разработчик\\p{L}*|администратор\\p{L}*)" + EE);
+const ORDER_AFTER = RX('(?:^|\\s|,)(?:and|then|und|dann|et|puis|y|luego|e|poi|en|i|и|oraz|a|ja)?\\s*,?\\s*(?:now\\s+)?' + word(IMP));
+const IGNORE_ALL = IGNORE_RX.map((re) => [new RegExp(re.source, re.flags + 'g'), true]).concat(IGNORE_EXTRA.map((re) => [new RegExp(re.source, re.flags + 'g'), false]));
 const OWN = RX('^\\s*,?\\s*(?:(?:that\\s+)?(?:i|we|ich|wir|je|nous|yo|io|eu)\\s+(?:sent|gave|wrote|made|left|had|mentioned|added|put|schickte|gab|schrieb|ai|avons)'
-  + '|(?:regarding|about|concerning|for|on|in|from|of|with|zur|zum|über|für|in der|im|sur|pour|dans|sobre|para|en|de|su|sulla|nel|per)\\s+(?:my|our|the|your|this|mein\\w*|unser\\w*|die|der|den|dem|ihr\\w*|le|la|les|mes|mon|ma|notre|mi|mis|el|los|las|il|lo|i|gli|meu|minha|o|a)\\s+(?:own\\s+|old\\s+)?(?:address|delivery|deliveries|order|parcel|package|return|refund|account|courier|driver|door|manual|website|site|guide|faq|box|leaflet|letter|e-?mail|mail|invoice|booking|tenant|adresse|lieferung|bestellung|paket|anleitung|livraison|commande|colis|notice|dirección|entrega|pedido|paquete|manual|indirizzo|consegna|ordine|pacco|endereço|encomenda)'
+  + '|(?:regarding|about|concerning|for|on|in|from|of|with|zur|zum|über|für|in der|im|sur|pour|dans|sobre|para|en|de|su|sulla|nel|per)\\s+(?:my|our|the|your|this|mein\\w*|unser\\w*|die|der|den|dem|ihr\\w*|le|la|les|mes|mon|ma|notre|mi|mis|el|los|las|il|lo|i|gli|meu|minha|o|a)\\s+(?:own\\s+|old\\s+|previous\\s+|last\\s+|earlier\\s+|first\\s+|other\\s+)?(?:gate|code|door\\s+code|entrance|neighbou?r|parking|pickup|collection|appointment|installation|assembly|address|delivery|deliveries|order|parcel|package|return|refund|account|courier|driver|door|manual|website|site|guide|faq|box|leaflet|letter|e-?mail|mail|invoice|booking|tenant|adresse|lieferung|bestellung|paket|anleitung|livraison|commande|colis|notice|dirección|entrega|pedido|paquete|manual|indirizzo|consegna|ordine|pacco|endereço|encomenda)'
   + '|(?:the|der|die|le|la|el|il)\\s+(?:courier|driver|delivery|kurier|fahrer|livreur|repartidor|corriere|door|tür|porte|puerta)'
   + "|[-–—]\\s*(?:that|this)(?:'s|\\s+is|\\s+was)\\s+what)");
 const QUOTED = /(?:typed|wrote|entered|said|asked|tried|put|pasted|sent)\s+['"‘“]$/i;
 
 function ignoreHit(t) {
-  const all = IGNORE_RX.map((re) => [re, true]).concat(IGNORE_EXTRA.map((re) => [re, false]));
-  for (const [re, counted] of all) {
-    const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
+  for (const [g, counted] of IGNORE_ALL) {
+    g.lastIndex = 0;
     let m;
     while ((m = g.exec(t)) !== null) {
       const words = m[0].trim().split(/\s+/).length;
       const end = m.index + m[0].length;
       const after = t.slice(end, end + 80);
-      const sentenceRest = t.slice(end).split(/(?<=[.!?;])\s|\n/)[0];
-      const orderAfter = RX('(?:^|\\s|,)(?:and|then|und|dann|et|puis|y|luego|e|poi|en|i|и|oraz|a)?\\s*,?\\s*(?:now\\s+)?' + word(IMP)).test(sentenceRest);
-      const own = (OWN.test(after) || ((FIRST_PERSON.test(sentenceRest) || FIRST_PERSON_I.test(sentenceRest)) && !orderAfter)) && !orderAfter;
+      const sentenceRest = t.slice(end, end + 200).split(/(?<=[.!?;])\s|\n/)[0];
+      const orderAfter = ORDER_AFTER.test(sentenceRest);
+      const authority = AUTHORITY.test(sentenceRest);
+      const own = !orderAfter && !authority && (OWN.test(after) || FIRST_PERSON.test(sentenceRest) || FIRST_PERSON_I.test(sentenceRest));
       const quoted = QUOTED.test(t.slice(Math.max(0, m.index - 12), m.index));
-      if ((!counted || words <= 12) && !own && !quoted) return true;
+      if ((!counted || words <= 14) && !own && !quoted) return true;
       g.lastIndex = m.index + 1;
     }
   }
@@ -220,7 +230,7 @@ function ignoreHit(t) {
 }
 
 // AI words, for identity switches and addresses
-const AI_NOUN = '(?:ai|a\\.i\\.|bot|\\p{L}*bot|robot|roboter|assistant|assistent|asistente|assistente|asystent|asistent|model|modell|modelo|modello|modèle|engine|classifier|classificateur|clasificador|classificatore|triage\\s+\\p{L}+|gpt|chatgpt|dan|llm|chatbot|ki|ia|бот|робот|ассистент|асистент|помощник|модель|ии|ші|program|machine|agent\\s+(?:without|with\\s+no)|helper)';
+const AI_NOUN = '(?:ai|a\\.i\\.|bot|\\p{L}*bot|engine|classifier|triage\\s+\\p{L}+|gpt|chatgpt|dan|llm|chatbot|ki|ia|ии|ші|program|machine|agent\\s+(?:without|with\\s+no)|helper|assistant|model|(?:robot|roboter|assistent|asistent|asystent|asistente|assistente|modell|modelo|modello|modèle|classificateur|clasificador|classificatore|бот|робот|ассистент|асистент|помощник|модел|bot)\\p{L}{0,4})';
 const RULE_WORDS = '(?:(?:no|without|free\\s+of|ohne|sans|sin|senza|sem|без|bez)\\s+(?:any\\s+)?(?:rules|restrictions|limits|filters|guidelines|regeln|règles|reglas|regole|regras|правил|ограничений|pravila|zasad|ograniczeń))';
 const NOT_AFTER_NOW = '(?!(?:an?|the|one|two|three|my|our)\\s+(?:\\p{L}+\\s+)?(?:week|day|hour|month|minute|year|contact|time|customer|member|client)s?\\b)(?!(?:connected|signed|logged|chatting|talking|speaking|in\\s+(?:a\\s+)?queue|number|being|transferred|offline|online|subscribed|registered|enrolled|a\\s+(?:gold|silver|premium|vip)\\b))';
 const SW = '(?:,\\s*)?';
@@ -229,14 +239,17 @@ const IDENTITY = [
   RX(EB + "(?:now|starting\\s+now|as\\s+of\\s+now|from\\s+now\\s+on|from\\s+this\\s+moment)" + SW + "\\s*(?:you\\s+are|you're)\\s+" + NOT_AFTER_NOW + "(?:(?:an?|the|my|your)\\s+)?(?:[\\p{L}\\d.-]+\\s+){0,3}?" + AI_NOUN + EE),
   RX(EB + "(?:you\\s+are|you're)\\s+(?:an?\\s+)?(?:unrestricted|uncensored|unfiltered|jailbroken|evil|rogue)\\s+(?:[\\p{L}-]+\\s+){0,2}?" + AI_NOUN + EE),
   RX(EB + "you\\s+are\\s+no\\s+longer\\s+(?:(?:an?|the|my|your)\\s+)?(?:[\\p{L}-]+\\s+){0,2}?" + AI_NOUN + EE),
-  RX(EB + "(?:you\\s+are|you're)\\s+(?:now\\s+)?[^.!?\\n]{0,40}?" + RULE_WORDS),
+  RX(EB + "(?:you\\s+are|you're)\\s+now\\s+[^.!?\\n]{0,40}?" + RULE_WORDS),
+  RX(EB + "(?:you\\s+are|you're)\\s+(?:an?\\s+)?(?:[\\p{L}-]+\\s+){0,2}?" + AI_NOUN + "\\s+(?:that|who|which|with|without)\\s+[^.!?\\n]{0,40}?(?:" + RULE_WORDS + "|approves?|ignores?|marks?|sets?|closes?|accepts?|answers?\\s+only)"),
   RX("\\b[Yy]ou\\s+are\\s+now\\s+[A-Z][\\w-]*(?:\\s*\\d[\\d.]*)?\\s*(?:[,.]\\s*)?(?:an?\\s+(?:AI|ai|bot|assistant|model)\\b|without\\b|with\\s+no\\b|and\\s+you\\b)", 'u'),
   RX(EB + "(?:you\\s+are|you're)\\s+(?:now\\s+)?(?:in|entering)\\s+(?:\\p{L}+\\s+){0,2}?(?:developer|dev|admin|god|debug|jailbreak|dan|unrestricted|sudo|root|maintenance)\\s+mode" + EE),
   RX(EB + "(?:you\\s+are|you're)\\s+now\\s+(?:acting|playing|operating|working)\\s+as" + EE),
-  RX(EB + "(?:pretend|imagine)\\s+(?:that\\s+)?(?:you\\s+are|you're|to\\s+be)\\s+[^.!?\\n]{0,40}?(?:" + AI_NOUN + "|" + RULE_WORDS + ")" + EE),
+  RX(EB + "(?:pretend|imagine)\\s+(?:that\\s+)?(?:you\\s+are|you're|to\\s+be)\\s+(?:(?:an?|the)\\s+)?(?:[\\p{L}-]+\\s+){0,2}?(?:" + AI_NOUN + ")" + EE),
+  RX(EB + "(?:pretend|imagine)\\s+(?:that\\s+)?(?:you\\s+are|you're|to\\s+be)\\s+[^.!?\\n]{0,40}?" + RULE_WORDS),
   RX(EB + "(?:roleplay|role-play|role\\s+play)\\s+as\\s+[^.!?\\n]{0,40}?(?:" + AI_NOUN + "|" + RULE_WORDS + ")" + EE),
   RX(EB + "(?:act|behave|respond|answer)\\s+(?:as|like)\\s+(?:an?\\s+|the\\s+)?(?:(?:unrestricted|uncensored|unfiltered|different|new|other|evil|jailbroken|free)\\s+)(?:" + AI_NOUN + ")" + EE),
   RX(EB + "(?:act|behave)\\s+as\\s+(?:an?\\s+|the\\s+)?" + AI_NOUN + "\\s+(?:with\\s+no|without)\\s+(?:rules|restrictions|limits|filters)"),
+  RX(EB + "from\\s+now\\s+on\\s*,?\\s+(?:you\\s+)?(?:act|behave|work|operate|function)\\s+(?:as|like)" + EE),
   RX("(?:^|\\n|[.!?;]\\s|,\\s)(?:from\\s+now\\s+on,?\\s+)?(?:please\\s+)?(?:act|behave)\\s+as\\s+(?:dan|chatgpt|an?\\s+(?:ai|bot|assistant|llm|model)\\s+(?:with\\s+no|without)|(?:an?\\s+)?(?:unrestricted|uncensored|jailbroken)\\b)"),
   RX(EB + "your\\s+new\\s+(?:role|job|task|purpose)\\s+(?:is|will\\s+be)\\s+(?:to\\s+)?(?:" + alt(IMP) + "|an?\\s+[^.!?\\n]{0,30}?" + AI_NOUN + ")" + EE),
   RX(EB + "your\\s+new\\s+instructions?\\s*(?:are|is|:)"),
@@ -252,7 +265,7 @@ const IDENTITY = [
 
 // tags, headings and comments
 const TAGS = [
-  /<<\/?SYS>>/i, /<\|[a-z_]{2,30}\|>/i, /\[\/?(?:SYSTEM|INST|SYS)\]/i,
+  /<<\/?SYS>>/i, /<\|[a-z_]{2,30}\|>/i, /\[\/?INST\]/i, /\[\/SYSTEM\]/i,
   /\{\{\s*system\s*\}\}/i, /<\/?\s*(?:system|assistant|instructions?|system_prompt|systemprompt|sys)(?:\s[^<>]{0,30})?>/i, /\[system\]\(#/i,
   RX('#{1,6} ?(?:new\\s+)?(?:system\\s+)?instructions?' + EE),
   RX('(?:^|\\n)#{1,6} ?response\\s*:'),
@@ -260,15 +273,21 @@ const TAGS = [
 ];
 
 // attack modes switched on
-const MODE = '(?:developer|dev|admin|administrator|debug|god|jailbreak|dan|unrestricted|sudo|root|maintenance)\\s+mode';
+const MODE = '(?:developer|dev|admin|administrator|debug|god|jailbreak|dan|unrestricted|sudo|root)\\s+mode';
 const MODE_ON = '(?:on|enabled|activated|active|true|yes|1)';
+const MODE_WORDS = '(?:(?:developer|dev|admin|administrator|debug|god|jailbreak|dan|unrestricted|sudo|root)\\s+mode|entwicklermodus|admin-?modus|administratormodus|debug-?modus|modo\\s+(?:de\\s+)?desarrollador|modo\\s+(?:de\\s+)?administrador|modalità\\s+(?:sviluppatore|amministratore|sviluppo)|mode\\s+(?:développeur|administrateur|admin)|modo\\s+(?:de\\s+)?desenvolvedor|ontwikkelaarsmodus|beheerdersmodus|beheermodus|tryb\\s+(?:dewelopera|administratora|programisty)|način\\p{L}*\\s+rada\\s+za\\s+(?:razvojne\\s+programere|programere|administratore)|razvojni\\s+način|administratorski\\s+način|режим\\s+(?:разработчика|администратора)|開発者モード|管理者モード|デバッグモード|开发者模式|開發者模式|管理员模式|管理員模式|调试模式)';
+const MODE_YOU = '(?:you\\s+are|you.re|je\\s+bent|jij\\s+bent|ben\\s+je|sada\\s+si|ti\\s+si|du\\s+bist|tu\\s+es|vous\\s+êtes|eres|estás|sei|você\\s+está|jesteś|ты)';
+const MODE_YOU_CJK = '(?:あなたは|君は|你|您)';
+const MODE_GO = '(?:enable|activate|enter|switch(?:\\s+yourself)?(?:\\s+(?:in)?to)?|turn\\s+on|go\\s+(?:in)?to|wechsle|wechseln\\s+sie|aktiviere|entra|entre|passa|passe|active|activez|activa|attiva|włącz|przejdź|uđi|prebaci|进入|切换|開启|开启|启用)';
 const MODES = [
   RX(EB + MODE + '\\s*[:=]\\s*' + MODE_ON + EE),
   RX('(?:^|\\n|[.!?;]\\s)\\s*(?:please\\s+)?(?:enable|activate|enter|switch\\s+(?:yourself\\s+)?(?:in)?to|turn\\s+on|go\\s+into)\\s+(?:the\\s+|your\\s+)?' + MODE + EE + '(?!\\s+(?:for|on|in)\\s+(?:my|our|the)\\s+(?:account|phone|device|app|router|computer|laptop|settings))'),
-  RX('(?:^|\\n|[.!?;]\\s)\\s*' + MODE + '\\s+(?:is\\s+)?(?:now\\s+)?(?:on|enabled|activated|active)\\s*(?:[.!]|$|\\n)'),
+  RX('(?:^|\\n|[.!?;]\\s)\\s*(?:please\\s+)?(?:turn|switch|put)\\s+(?:the\\s+|your\\s+)?' + MODE + '\\s+on' + EE),
   RX('(?:^|\\n|[.!?;]\\s)\\s*(?:please\\s+)?switch\\s+yourself\\s+(?:in)?to\\s+(?:\\p{L}+\\s+)?mode'),
+  RX(EB + MODE_YOU + EE + '[^.!?。\\n]{0,25}?' + MODE_WORDS),
+  RX(MODE_YOU_CJK + '[^.!?。\\n]{0,25}?' + MODE_WORDS),
+  RX('(?:^|\\n|[.!?;。]\\s?)\\s*(?:please\\s+|bitte\\s+|por\\s+favor,?\\s+)?' + MODE_GO + '[^.!?。\\n]{0,25}?' + MODE_WORDS + '(?![^.!?。\\n]{0,40}\\b(?:on|for|in)\\s+(?:my|our|the)\\s+(?:phone|device|account|router|app|computer|laptop|settings|game))'),
   RX('(?:modo\\s+(?:de\\s+)?desarrollador|modalità\\s+sviluppatore|mode\\s+développeur|entwicklermodus|modo\\s+(?:de\\s+)?desenvolvedor|ontwikkelaarsmodus|tryb\\s+dewelopera|режим\\s+разработчика)(?:\\s*:|\\s+(?:activado|activada|attivata|attivo|activé|aktiviert|ativado|geactiveerd|aktywny|включ\\S*)\\s*(?:[.!:]|$|\\n))'),
-  RX('(?:^|\\n|[.!?;]\\s)\\s*(?:aktiviere|activa|attiva|active|activez|ative|włącz)\\s+(?:den\\s+|el\\s+|la\\s+|le\\s+|o\\s+)?(?:entwicklermodus|modo\\s+(?:de\\s+)?desarrollador|modalità\\s+sviluppatore|mode\\s+développeur|modo\\s+(?:de\\s+)?desenvolvedor|tryb\\s+dewelopera)'),
 ];
 
 // field orders: an order verb + a schema field + a value that field allows
@@ -277,7 +296,6 @@ const FIELD_TR = {
     'prioritet', 'приоритет'],
   urgency: ['dringlichkeit', 'urgence', 'urgencia', 'urgenza', 'urgência'],
   category: ['kategorie', 'catégorie', 'categoría', 'categoria', 'categorie', 'kategoria', 'категорию', 'категория'],
-  estimated_amount: ['amount', 'betrag', 'montant', 'importe', 'importo', 'valor'],
 };
 const VALUE_TR = ['niedrig', 'hoch', 'dringend', 'basse', 'bas', 'haute', 'élevée', 'urgente', 'baja', 'alta', 'bassa',
   'baixa', 'laag', 'hoog', 'niski', 'wysoki', 'nizak', 'visok', 'низкий', 'высокий', 'срочный', 'normale', 'normal'];
@@ -292,32 +310,43 @@ function fieldNames(k) {
 
 function fieldRegexes(schema) {
   const props = (schema && schema.properties) || {};
-  const out = { order: [], declared: [] };
+  const out = { order: [], declared: [], keyed: [] };
   for (const [k, s] of Object.entries(props)) {
     const types = Array.isArray(s.type) ? s.type : [s.type];
     const values = [];
     if (Array.isArray(s.enum)) values.push(...s.enum.filter((x) => typeof x === 'string').map(esc));
     if (types.includes('boolean')) values.push('true', 'false', 'yes', 'no', 'wahr', 'falsch', 'vrai', 'faux', 'verdadero', 'falso', 'vero', 'verdadeiro');
     if (types.includes('number') || types.includes('integer')) values.push(NUM_WORDS);
-    if (FIELD_TR[k] && k !== 'estimated_amount') values.push(...VALUE_TR);
+    if (FIELD_TR[k]) values.push(...VALUE_TR);
     if (!values.length) continue;
     const F = '(?:' + fieldNames(k).join('|') + ')';
     const V = '(?:' + values.join('|') + ')';
     out.order.push(RX(EB + '(?:' + alt(IMP) + ')' + EE + '[^.!?\\n]{0,40}?' + EB + F + EE + COMPOUND_AFTER + '[^.!?\\n]{0,25}?' + EB + V + EE));
     out.order.push(RX(EB + '(?:' + alt(IMP) + ')' + EE + '[^.!?\\n]{0,40}?' + EB + V + EE + '\\s+' + F + EE + COMPOUND_AFTER));
     out.declared.push(RX(EB + F + EE + '\\s*(?:=|is|should\\s+be|must\\s+be|to|as|of|:)\\s*["\']?' + V + EE));
+    out.keyed.push(RX('["\']' + esc(k) + '["\']\\s*:\\s*["\']?' + V + EE));
   }
   return out;
 }
 
+const CORRECTION = RX(EB + "(?:typo|correction|corrected|mistake|wrong|instead|i\\s+meant|we\\s+meant|update\\s+my|small\\s+change|we\\s+grew|my\\s+(?:claim|account|order|lead|form|request|plan)|our\\s+(?:claim|account|order|company|form|request|plan))" + EE);
+// an order in the sentence that is not a correction of the customer's own data
+function fieldOrderHit(t, F) {
+  for (const s of t.split(/(?<=[.!?;])\s|\n/)) {
+    if (CORRECTION.test(s)) continue;
+    if (F.order.some((re) => re.test(s))) return true;
+  }
+  return false;
+}
+
 function keyRegex(schema) {
-  const keys = Object.keys((schema && schema.properties) || {}).map(esc);
-  return keys.length ? RX('["\'](?:' + keys.join('|') + ')["\']\\s*:') : null;
+  const F = fieldRegexes(schema);
+  return F.keyed.length ? { test: (x) => F.keyed.some((re) => re.test(x)) } : null;
 }
 
 const VALUE_ORDERS = [
-  RX(EB + '(?:rate|score|give|grade)\\s+(?:this|the|every|each|all|our|my)\\s+(?:lead|ticket|claim|one|request)s?\\s+(?:at\\s+|as\\s+|with\\s+|a\\s+)?\\d+' + EE),
-  RX(EB + "(?:don't|do\\s+not|never)\\s+(?:report|flag|mark|treat|classify|count|consider|see)\\s+(?:this|it|me|us|my\\s+\\p{L}+)\\s+as\\s+(?:an?\\s+)?(?:manipulation|injection|attack|attempt|fraud|spam|urgent|high|needing)"),
+  RX('(?:^|\\n|[.!?;:]\\s|,\\s)\\s*(?:please\\s+)?(?:rate|score|give|grade)\\s+(?:this|the|every|each|all|our)\\s+(?:lead|ticket|claim|request)s?\\s+(?:at\\s+|as\\s+|with\\s+|a\\s+)?\\d+' + EE),
+  RX(EB + "(?:don't|do\\s+not|never)\\s+(?:report|flag|mark|treat|classify|count|consider|see)\\s+(?:this|it|me|us|my\\s+\\p{L}+)\\s+as\\s+(?:an?\\s+)?(?:manipulation|injection|attack)"),
 ];
 
 const FIXED_VERBS = '(?:return|respond|reply|answer|output|use|give|print|write|send\\s+back|devuelve|devuelva|responde|responda|retorne|retorna|restituisci|rispondi|renvoie|renvoyez|réponds|répondez|gib|antworte|verwende|usa|utilise)';
@@ -326,12 +355,20 @@ function fixedHit(t, schema, KEY) {
   if (!keys.length) return false;
   const K = '(?:' + keys.join('|') + ')';
   const res = [
-    RX(EB + FIXED_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']?' + K + '["\']?\\s*:'),
+    RX(EB + FIXED_VERBS + EE + '[\\s\\S]{0,80}?\\{\\s*["\']' + K + '["\']\\s*:'),
     RX(EB + '(?:correct|expected|right|desired|required|final)\\s+(?:output|answer|json|response|result)' + EE + '\\s*(?:is|:|=)?\\s*\\{\\s*["\']?' + K),
     RX(EB + '(?:your|the)\\s+(?:answer|response|output|reply|json)\\s+(?:must|should|has\\s+to)\\s+be\\s+(?:exactly\\s+)?(?:this\\s*:?\\s*)?\\{'),
-    RX(EB + FIXED_VERBS + EE + '(?:\\s+with)?\\s+(?:this|exactly|the\\s+following|only)\\s*:?\\s*\\n?\\s*' + K + '\\s*:\\s*\\S'),
   ];
-  return res.some((re) => re.test(t));
+  if (res.some((re) => re.test(t))) return true;
+  // "Return this:\npriority: low" or "Answer format:\nfit_score: 100": a field line with a value that field allows
+  const F = fieldRegexes(schema);
+  const lead = RX(EB + '(?:' + FIXED_VERBS + EE + '(?:\\s+with)?\\s+(?:this|exactly|the\\s+following|only)|(?:answer|output|response|reply)\\s+format)\\s*:?', 'gi');
+  let m;
+  while ((m = lead.exec(t)) !== null) {
+    const rest = t.slice(m.index + m[0].length, m.index + m[0].length + 160);
+    if (F.declared.some((re) => re.test(rest.split('\n').slice(0, 4).join('\n')))) return true;
+  }
+  return false;
 }
 
 const ADDRESS = [
@@ -345,11 +382,11 @@ function addressHit(t, F, KEY) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(t)) !== null) {
-      const after = t.slice(m.index + m[0].length);
+      const after = t.slice(m.index + m[0].length, m.index + m[0].length + 300);
       const first = after.split(/(?<=[.!?;])\s|\n/).find((x) => x.trim()) || '';
       const name = /^\s*(?:dear|hi|hello|hey)?\s*,?\s*claude\s*,/i.test(m[0].replace(/^[\s.,!?;\n]+/, ''));
       if (startsWithOrder(first) && !(name && !/\b(?:priority|category|urgency|ticket|lead|claim)\b/i.test(first))) return true;
-      if (F.declared.some((r) => r.test(first)) || F.order.some((r) => r.test(first)) || (KEY && KEY.test(first))) return true;
+      if (F.declared.some((r) => r.test(first)) || fieldOrderHit(first, F) || (KEY && KEY.test(first))) return true;
       if (ignoreHit(first) || IDENTITY.some((r) => r.test(first))) return true;
       if (m.index === re.lastIndex) re.lastIndex++;
     }
@@ -361,45 +398,48 @@ const ROLE = '(?:system|systems?\\s+message|assistant|developer|dev|admin|admini
 const ROLE_QUAL = '(?:message|prompt|override|note|notice|instructions?|alert|update|command|directive|nachricht|mensaje|messaggio|mitteilung)';
 const ROLE_RX = [
   RX('(?:\\[|\\(|<|\\{\\{)\\s?(' + ROLE + ')(?:\\s(' + ROLE_QUAL + '))?\\s?(?:\\]|\\)|>|\\}\\})\\s?:?([^\\n]{0,200})', 'gi'),
-  RX(EB + '(' + ROLE + ')(?:\\s(' + ROLE_QUAL + '))?\\s?[:：]([^\\n]{0,200})', 'gi'),
+  RX(EB + '(' + ROLE + ')(?:\\s(' + ROLE_QUAL + '))?\\s?[:：>]([^\\n]{0,200})', 'gi'),
   RX(EB + '(' + ROLE + ')(?:\\s(' + ROLE_QUAL + '))?\\s[-–—]{1,2}\\s([^\\n]{0,200})', 'gi'),
 ];
-const RULES_OFF = RX('(?:rules|instructions|restrictions|guidelines)\\s+(?:no\\s+longer|do\\s+not|don.t)\\s+apply|' + EB + '(?:this|the)\\s+(?:ticket|claim|lead|message|e-?mail|request|case|customer|sender|user|account)\\s+(?:is|has)\\s+(?:not\\s+)?\\p{L}|' + EB + '(?:no\\s+action\\s+(?:is\\s+)?(?:required|needed)|do\\s+not\\s+(?:escalate|reply|flag|review|forward))');
+const RULES_OFF = RX(EB + '(?:must|should|have\\s+to|are\\s+to|is\\s+to)\\s+be\\s+(?:closed|approved|rejected|marked|set|treated|escalated|ignored|deleted|resolved|archived|refunded|accepted)' + EE + '|(?:rules|instructions|restrictions|guidelines)\\s+(?:no\\s+longer|do\\s+not|don.t)\\s+apply|' + EB + '(?:this|the)\\s+(?:ticket|claim|lead|message|e-?mail|request|case|customer|sender|user|account)\\s+(?:is|has)\\s+(?:not\\s+)?\\p{L}|' + EB + '(?:no\\s+action\\s+(?:is\\s+)?(?:required|needed)|do\\s+not\\s+(?:escalate|reply|flag|review|forward))');
 const TECH = /\b(?:windows|macos|mac\s?os|ios|ipados|android|linux|ubuntu|debian|fedora|chrome|chromium|firefox|safari|edge|opera|brave|browser|version|app|build|ram|gb|cpu|intel|amd|pixel|iphone|ipad|samsung|galaxy|huawei|xiaomi|hp|dell|lenovo|asus|acer|surface|thinkpad|macbook|x64|x86|arm64|kernel|firmware|device|desktop|laptop|tablet|phone|os)\b/i;
+
+const SECOND_PERSON = RX(EB + "(?:you|your|du|dein\\p{L}*|tu|ton|ta|tes|vous|votre|tú|usted|tuo|tua|você|seu|sua|jij|je|jouw|ty|ty|ти|ты|твой|ваш\\p{L}*|vi)" + EE + '|あなた|君|你|您|당신|너|أنت|تو|तुम|आप');
+const CJK_ORDER = /(?:把|将|將|请|請|不要|别|別|设为|設為|设置|設置|标记|標記|关闭|關閉|改为|改為|标成|標成|してください|して下さい|しろ|せよ|に設定|をマーク|閉じ|하세요|해라|해주세요|설정|표시|닫아|اجعل|ضع|قم\s|أغلق|لا\s+ت|करें|करो|सेट\s+कर|बंद\s+कर)/u;
 
 function isOrder(rest, F, KEY) {
   const r = rest.split(/(?<=[.!?;])\s/)[0];
-  return startsWithOrder(r) || RULES_OFF.test(rest) || F.order.some((re) => re.test(rest)) ||
+  return startsWithOrder(r) || RULES_OFF.test(rest) || fieldOrderHit(rest, F) ||
     (KEY && KEY.test(rest)) || /\{\s*["']|\b\w+\s*=\s*\S/.test(rest) || ignoreHit(rest) ||
     IDENTITY.some((re) => re.test(rest)) || VALUE_ORDERS.some((re) => re.test(rest)) ||
     RX(EB + "(?:you\\s+are|you're)\\s+(?:now\\s+)?(?:an?\\s+|the\\s+)(?:[\\p{L}-]+\\s+){0,2}?" + AI_NOUN + EE).test(r) ||
     RX(EB + "(?:you\\s+are\\s+now|you're\\s+now)" + EE).test(r);
 }
 
-// a plain spec line ("Windows 11", "iOS 17, app 3.1") after a role word is not an order
-function isSpec(rest) {
-  const line = rest.split(/(?<=[.!?;。])\s?/)[0].trim();
-  const words = line.split(/\s+/).filter(Boolean);
-  return words.length > 0 && words.length <= 12 && (/\d/.test(line) || TECH.test(line)) && !startsWithOrder(line);
+// after a strong role marker (capitals, brackets, non-Latin script): an order, a schema field, a second-person
+// sentence or a CJK/Arabic/Hindi order form means the line speaks to the AI
+function strongOrder(rest, F, KEY, schema) {
+  if (isOrder(rest, F, KEY) || CJK_ORDER.test(rest) || SECOND_PERSON.test(rest.split(/(?<=[.!?;。])\s?/)[0])) return true;
+  const keys = Object.keys((schema && schema.properties) || {}).flatMap(fieldNames);
+  return keys.length > 0 && RX(EB + '(?:' + keys.join('|') + ')' + EE).test(rest);
 }
 
-function roleHit(t, F, KEY) {
+function roleHit(t, F, KEY, schema) {
   for (const re of ROLE_RX) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(t)) !== null) {
       const role = m[1], qual = (m[2] || '').toLowerCase();
       let rest = (m[3] || '').trim();
-      if (!rest) { const nl = t.indexOf('\n', m.index + m[0].length); rest = nl >= 0 ? t.slice(nl + 1).split('\n')[0] : ''; }
+      if (!rest) { const nl = t.indexOf('\n', m.index + m[0].length); rest = nl >= 0 ? t.slice(nl + 1, nl + 300).split('\n')[0] : ''; }
       const pre = t.slice(Math.max(0, m.index - 4), m.index);
       const start = m.index === 0 || /(?:\n|[.!?;]\s|,\s|#\s?|[(\[{<]\s?|-\s)$/.test(pre);
       const caps = /\p{L}{2}/u.test(role) && role === role.toUpperCase() && /\p{Lu}/u.test(role);
       const caseless = !/[\p{Lu}\p{Ll}]/u.test(role);
       const bracket = /^[\[(<{]/.test(m[0]);
-      const strongQual = /override|instruction|command|update|directive|prompt|notice/.test(qual) || /^override$/i.test(role);
-      const strong = caps || caseless || bracket || strongQual;
-      if (strong && rest && !isSpec(rest)) return true;
-      if (strong && !rest) return true;
+      const strongQual = /override|instruction|command|directive|prompt/.test(qual) || /^override$/i.test(role);
+      if (strongQual) return true;
+      if ((caps || caseless || bracket || /update|notice|note/.test(qual)) && rest && strongOrder(rest, F, KEY, schema)) return true;
       if (start && isOrder(rest, F, KEY)) return true;
       if (m.index === re.lastIndex) re.lastIndex++;
     }
@@ -422,11 +462,11 @@ function stringsIn(v) {
 function hitsIn(t, schema, F, KEY) {
   const hits = [];
   if (ignoreHit(t)) hits.push('ignore earlier instructions');
-  if (roleHit(t, F, KEY)) hits.push('role line');
+  if (roleHit(t, F, KEY, schema)) hits.push('role line');
   if (TAGS.some((re) => re.test(t))) hits.push('role tag or comment');
   if (IDENTITY.some((re) => re.test(t))) hits.push('identity switch');
   if (MODES.some((re) => re.test(t))) hits.push('mode switch');
-  if (F.order.some((re) => re.test(t)) || (KEY && KEY.test(t)) || VALUE_ORDERS.some((re) => re.test(t))) hits.push('field order');
+  if (fieldOrderHit(t, F) || (KEY && KEY.test(t)) || VALUE_ORDERS.some((re) => re.test(t))) hits.push('field order');
   if (fixedHit(t, schema, KEY)) hits.push('fixed answer');
   if (addressHit(t, F, KEY)) hits.push('order addressed to the AI');
   const ni = RX(EB + '(?:new|updated|revised)\\s+(?:system\\s+)?instructions?\\s*[:\\-–]|(?:neue\\s+anweisungen|nouvelles\\s+instructions|nuevas\\s+instrucciones|nuove\\s+istruzioni|novas\\s+instruções|nieuwe\\s+instructies|nowe\\s+instrukcje|nove\\s+upute|новые\\s+инструкции)\\s*:').exec(t);

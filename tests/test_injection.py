@@ -148,6 +148,11 @@ LONG_INPUTS = [  # must finish in under 1 second each (fix red team finding 2)
     ("ticket_triage", "Hello. " + "\n\u202f" * 3000 + " Thanks."),
     ("ticket_triage", "Hello. " + "\n\f" * 3000 + " Thanks."),
     ("ticket_triage", "Hi team, " + "\u2028 \u1680 \u205f" * 2000 + " end"),
+    ("ticket_triage", "AI, " * 7500),
+    ("ticket_triage", "Hi Claude, " * 2700),
+    ("ticket_triage", "\nAI:" * 7500),
+    ("ticket_triage", "note to the AI " * 2000),
+    ("ticket_triage", "System:\n" * 3750),
 ]
 
 
@@ -169,8 +174,15 @@ def main():
     rows += [("rt2-attack %d" % i, s, t, True) for i, (s, t) in enumerate(RT.MISSED_ATTACKS2, 1)]
     rows += [("rt2-flagged %d" % i, s, t, False) for i, (s, t) in enumerate(RT.WRONGLY_FLAGGED2, 1)]
     rows += [("rt2-normal %d" % i, s, t, False) for i, (s, t) in enumerate(RT.NORMAL_OK2, 1)]
+    rows += [("rt3-attack %d" % i, s, t, True) for i, (s, t) in enumerate(RT.MISSED_ATTACKS3, 1)]
+    rows += [("rt3-flagged %d" % i, s, t, False) for i, (s, t) in enumerate(RT.WRONGLY_FLAGGED3, 1)]
+    rows += [("rt3-normal %d" % i, s, t, False) for i, (s, t) in enumerate(RT.NORMAL_OK3, 1)]
     rows += [("long %d" % i, s, t, None) for i, (s, t) in enumerate(LONG_INPUTS, 1)]
+    known = [(s, t) for s, t in RT.KNOWN_LIMITS]
     out = run_node([{"input": {"text": t}, "schema": SCHEMAS[s]} for _, s, t, _ in rows])
+    kn = run_node([{"input": {"text": t}, "schema": SCHEMAS[s]} for s, t in known]) if known else []
+    for (s_, t), o in zip(known, kn):
+        print("KNOWN LIMIT (not counted) %s | hits %s | %s" % ("flagged" if o["h"] else "missed", o["h"], t[:100]))
     bad = 0
     for (label, _, text, must), o in zip(rows, out):
         if must is None:
