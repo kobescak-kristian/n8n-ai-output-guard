@@ -147,8 +147,9 @@ the guard screens" comes from owner decision 14, gate v4).
   answer) does alert (gate v4, the line "Rule 6, how the guard screens").
 - **Time budget.** A guard call returns within 170 seconds in total: the
   guard plans its calls with 160 seconds and keeps 10 seconds for n8n; the
-  second AI step gets only the time left. (CF3 counts a call over 180
-  seconds as lost.) A timed-out call counts as a
+  AI injection check (at most about 35 seconds with its retry) and every AI
+  call count in that time, and the second AI step gets only the time left.
+  (CF3 counts a call over 180 seconds as lost.) A timed-out call counts as a
   timeout (rule 2).
 - **Fix kit.** It runs once per gated run on every claim_intake case with
   the case's own options, fallback and review action. Setup cases run

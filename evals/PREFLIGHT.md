@@ -14,7 +14,7 @@ have caught. Source: BLUEPRINT.md v1.3, U4.3.
 | 3 | Anthropic credential valid | one live call through the AI step | answer received; key expiry date (30-day key from 2026-10-19) is after the series ends |
 | 4 | Slack bot can post | one test message to #ai-review through `Slack n8n-output-guard` | message ts returned; bot is a member of #ai-review |
 | 5 | Slack posting limit | count review messages + alerts this series will post (from the case list) | runner spacing keeps it at or under about 1 message per second per channel; guard retries Slack 429 with Retry-After |
-| 6 | Anthropic rate limit | live calls this series will make: live cases x up to 2 calls, plus one AI injection check call per case (gate v4), plus the fix-kit runs' calls, x 3 runs | below the workspace's per-minute limit with the runner's spacing |
+| 6 | Anthropic rate limit | live calls this series will make: live cases x up to 2 calls, plus one AI injection check call per case, two after a retryable API error (gate v4, decision 15), plus the fix-kit runs' calls, x 3 runs | below the workspace's per-minute limit with the runner's spacing |
 | 7 | No KOS rule deploy or n8n change planned during the series | owner | none planned |
 | 8 | Frozen workflow commit published | compare the published workflows with the commit (tools) | same commit as the RESULTS.md entry will name |
 | 9 | Tables clean | runner reset of q119_* log, queue and claims tables | all empty before run 1 |

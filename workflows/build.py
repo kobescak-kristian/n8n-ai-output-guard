@@ -28,7 +28,8 @@ TABLES = {
                  ("alert_wanted", "boolean"), ("alert_ts", "string"), ("alert_error", "string"),
                  ("review_id", "string"), ("review_ts", "string"), ("review_error", "string"),
                  ("started_at", "string"), ("seconds", "number"), ("model", "string"), ("tokens_in", "number"),
-                 ("tokens_out", "number"), ("data", "string"), ("source", "string"), ("reason", "string")],
+                 ("tokens_out", "number"), ("data", "string"), ("source", "string"), ("reason", "string"),
+                 ("ai_check", "string")],
     "q119_queue": [("review_id", "string"), ("call_id", "string"), ("case_id", "string"), ("run_label", "string"),
                    ("task", "string"), ("status", "string"), ("reason", "string"), ("input_excerpt", "string"),
                    ("answers", "string"), ("passed_answer", "string"), ("schema", "string"),
@@ -229,7 +230,8 @@ def build_injection_check(url="https://api.anthropic.com/v1/messages", key="inje
     w.add("Wait before retry", "n8n-nodes-base.wait", 1.1, {"resume": "timeInterval", "amount": "={{ $json.wait }}",
                                                             "unit": "seconds"}, 5, 1,
           webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, f"q119/{key}/wait")))
-    code(w, "Retry request", "return [{ json: $('Build request').first().json }];", 6, 1)
+    code(w, "Retry request", "return [{ json: Object.assign({}, $('Build request').first().json, { timeout_ms: 10000 }) }];",
+         6, 1)  # the retry gets 10 s: worst case of the AI check 20 + 5 + 10 s
     http_messages(w, "Ask Claude (retry)", url, 7, 1, cred="anthropicApi")
     code(w, "Verdict (retry)", J.INJ_NORMALIZE.replace("__TRY__", "2"), 8, 1)
     w.chain("Start", "Build request", "Ask Claude", "Verdict", "Retry AI check?")

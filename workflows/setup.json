@@ -132,6 +132,10 @@
       {
        "name": "reason",
        "type": "string"
+      },
+      {
+       "name": "ai_check",
+       "type": "string"
       }
      ]
     }

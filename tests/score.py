@@ -168,6 +168,12 @@ def score_run(run, cases):
             ml = mlog.get((cid, "main"), [])
             if len(ml) >= 2 and ml[1]["at"] - ml[0]["at"] > 25:
                 notes.append("REPORTED: waited %.1f s, cap is 20 s (3b)" % (ml[1]["at"] - ml[0]["at"]))
+        try:  # reported, not gated: how often the AI-check retry fired (decision 15)
+            ai_tries = json.loads((row or {}).get("ai_check") or "{}").get("tries", 1)
+        except (ValueError, AttributeError):
+            ai_tries = 1
+        if ai_tries and ai_tries > 1:
+            notes.append("REPORTED: AI injection check retried once (decision 15)")
         # log complete
         good_log = len(rows) == 1 and row.get("status") == st
         M["log"].append((cid, good_log))

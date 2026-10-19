@@ -266,7 +266,7 @@ return [{ json: S }];
 
 PREPARE_INJ = LIB + r"""
 const S = $input.first().json;
-return [{ json: { state: S, step: { text: stringsIn(S.ai_input).join('\n'), meta: S.meta, options: { timeout_ms: 30000 } } } }];
+return [{ json: { state: S, step: { text: stringsIn(S.ai_input).join('\n'), meta: S.meta, options: { timeout_ms: 20000 } } } }];
 """
 
 READ_INJ = r"""
@@ -275,7 +275,8 @@ READ_INJ = r"""
 const S = $('Prepare injection check').first().json.state;
 const r = $input.first().json || {};
 const v = String(r.verdict || '').toLowerCase();
-S.ai_injection_check = { verdict: v || 'error', tries: r.tries || 1, model: r.model || '', tokens_in: r.tokens_in || 0, tokens_out: r.tokens_out || 0 };
+S.ai_injection_check = { verdict: v || 'error', tries: r.tries || 1, model: r.model || '', tokens_in: r.tokens_in || 0, tokens_out: r.tokens_out || 0,
+  error: String(r.error_message || r.error || '').slice(0, 200) };
 if (v === 'yes') { S.injection = true; S.injection_hits = S.injection_hits.concat(['AI injection check']); }
 else if (v !== 'no') {
   S.injection = true; S.classifier_error = true;
@@ -437,6 +438,7 @@ return [{ json: {
   review_id: S.review_id || '', review_ts: S.review_ts || '', review_error: S.review_slack_error || S.queue_error || '',
   started_at: S.started_at, seconds: S.seconds, model, tokens_in: sum('tokens_in'), tokens_out: sum('tokens_out'),
   data: S.final.data === null ? '' : JSON.stringify(S.final.data), source: S.final.source || '', reason: cut(S.final.reason, 900),
+  ai_check: S.ai_injection_check ? JSON.stringify(S.ai_injection_check) : '',
 } }];
 """
 
@@ -537,43 +539,47 @@ INJ_PROMPT = 'You screen text that customers send to a company (support tickets,
 
 INJ_REQUEST = r"""
 const it = $input.first().json || {};
-return [{ json: { timeout_ms: (it.options || {}).timeout_ms || 30000, body: { model: 'claude-haiku-5-5', max_tokens: 1024,
+return [{ json: { timeout_ms: (it.options || {}).timeout_ms || 20000, body: { model: 'claude-haiku-5-5', max_tokens: 1024,
   system: __PROMPT__, messages: [{ role: 'user', content: 'Text to screen:\n<<<\n' + String(it.text || '') + '\n>>>' }],
   output_config: { effort: 'low' } } } }];
 """
 
 INJ_NORMALIZE = r"""
-// try __TRY__ of at most 2. An API error that a retry can fix (timeout, closed connection, HTTP 408, 429, 5xx)
-// on try 1 asks for one retry (owner decision 15); any other error, or an error on try 2, is final.
+// try __TRY__ of at most 2. An API error that a retry can fix (no reply at all: timeout, closed or refused
+// connection, other network error; HTTP 408, 429, 5xx) on try 1 asks for one retry (owner decision 15);
+// any other error, or an error on try 2, is final.
 const TRY = __TRY__;
 const r = $input.first().json || {};
 const h = r.headers || {};
-function waitSeconds(v) {  // retry-after in seconds or as an HTTP date; missing or unreadable: 1 s; at most 10 s
+function waitSeconds(v) {  // retry-after in seconds or as an HTTP date; missing or unreadable: 1 s; at most 5 s
   if (v === undefined || v === null || String(v).trim() === '') return 1;
   const t = String(v).trim();
   let secs = /^\+?\d+(?:\.\d+)?(?:e\+?\d+)?$/i.test(t) ? Number(t) : NaN;
   if (Number.isNaN(secs)) { const d = Date.parse(t); if (!Number.isNaN(d)) secs = (d - Date.now()) / 1000; }
   if (Number.isNaN(secs)) return 1;
-  return Math.min(Math.max(secs, 0), 10);
+  return Math.min(Math.max(secs, 0), 5);
 }
-function apiError(message, retryable, wait) {
+function fail(message, retryable, wait) {
   const retry = retryable && TRY === 1;
   return [{ json: { verdict: 'error', tries: TRY, retry, wait: retry ? wait : 0, error_message: String(message).slice(0, 200) } }];
 }
-if (r.statusCode === undefined) return apiError((r.error && r.error.message) || r.error || 'no response', true, 1);
+if (r.statusCode === undefined) return fail((r.error && r.error.message) || r.error || 'no response', true, 1);
 const code = Number(r.statusCode);
-if (code !== 200) return apiError('HTTP ' + r.statusCode, code === 408 || code === 429 || code >= 500,
+if (code !== 200) return fail('HTTP ' + r.statusCode, code === 408 || code === 429 || code >= 500,
   code === 429 ? waitSeconds(h['retry-after']) : 1);
 let b = {};
 try { b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {}); } catch (e) { b = {}; }
-const text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();
-// clear answer = YES or NO as a whole word, and only one of the two in the answer; an answer with both,
-// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002); not retried
-const found = new Set([...text.matchAll(/(?<![A-Z])(YES|NO)(?![A-Z])/g)].map((x) => x[1]));
-const verdict = found.size === 1 ? [...found][0].toLowerCase() : 'error';
+const raw = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('');
+// clear answer (ADR-002): the whole reply is YES or NO, after trimming spaces, markdown marks, quotes and end
+// punctuation, and the answer ended normally. Anything else (prose, both words, a cut or refused answer) is an
+// error: fail-closed, the item goes to review with an alert; not retried.
+const word = raw.replace(/^[\s*_`"'“”‘’«».!]+|[\s*_`"'“”‘’«».!]+$/g, '').toUpperCase();
+const ended = b.stop_reason === 'end_turn' || b.stop_reason === 'stop_sequence';
+const verdict = ended && (word === 'YES' || word === 'NO') ? word.toLowerCase() : 'error';
 return [{ json: { verdict, tries: TRY, retry: false, wait: 0, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0,
   tokens_out: (b.usage || {}).output_tokens || 0,
-  error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];
+  error_message: verdict === 'error' ? (ended ? 'unclear answer: ' : 'answer stopped early (' + (b.stop_reason || 'none') + '): ')
+    + [...raw.trim()].slice(0, 60).join('') : '' } }];
 """
 
 # ---------- review form ----------

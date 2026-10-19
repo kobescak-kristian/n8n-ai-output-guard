@@ -27,13 +27,21 @@ such field and the order cannot change its answer (a limit, listed in the README
 recorded known limit (a gated: false case; prompt v1 caught it). So the AI check is now tuned toward fewer
 false flags, and the code check carries more of the attack screening.
 
+Raw-reply measure for the strict answer rule (2026-10-19 night, tools/exp_raw_answers.py, two passes of 2
+repeats over every list and every visible input, tests/results/exp-raw-answers-v2-low.json): 4,496 replies;
+all but 3 were exactly YES or NO with stop reason end_turn; the 3 others were prose on attack texts, which
+the strict rule sends to review. 0 normal texts flagged. Haiku's own answers vary from run to run: in pass 2,
+48 attack replies were not YES, and the code check flags all 48 for the AI step they were written for
+(0 attacks passed both checks; the known limit was answered YES).
+
 ## Decision
 
 Every guard call screens the input with both the code check and the AI injection check (a sub-workflow
 called by ID); if either one flags the input, the result is needs_review, and if the AI check fails or gives
-no clear answer, the result is also needs_review, with an alert. A clear answer is YES or NO as a whole word,
-with only one of the two in the answer; an answer with both or with neither is not clear. On an API error
-that a retry can fix (timeout, closed connection, HTTP 408, 429 or 5xx) the AI check asks once more (owner
+no clear answer, the result is also needs_review, with an alert. A clear answer is a whole reply of YES or NO
+(after trimming spaces, markdown marks, quotes and end punctuation) that ended normally (stop reason
+end_turn); prose, both words, or a cut or refused answer is not clear. On an API error
+that a retry can fix (no reply at all (timeout, closed or refused connection, other network error), HTTP 408, 429 or 5xx) the AI check asks once more (owner
 decision 15); the fail-closed rule applies to what is left after that retry. An unclear answer is not retried.
 
 ## Alternatives rejected
@@ -47,11 +55,12 @@ decision 15); the fail-closed rule applies to what is left after that retry. An 
 
 ## Consequences
 
-- One extra small AI call per guard call (about $0.00005 and 1 s at Haiku 5.5 prices on 2026-10-19).
+- One extra small AI call per guard call, two after a retryable API error (about $0.00005 and 1 s at Haiku 5.5 prices on 2026-10-19).
 - Injection screening is partly an AI judgement: the README calls it best effort, and names the check.
-- One short API error costs one retry (1 s, or the 429 retry-after time up to 10 s). An API outage longer
+- One short API error costs one retry (1 s, or the 429 retry-after time up to 5 s; the first try has 20 s,
+  the retry 10 s, so the AI check takes at most about 35 s of the guard's 160 s budget). An API outage longer
   than that sends every item to review (with alerts) until the AI check works again.
-- In tests every case makes one live AI-check call, so runs need the API; a run-to-run flip of the AI check
+- In tests every case makes one live AI-check call (two after a retryable API error), so runs need the API; a run-to-run flip of the AI check
   on a simulated case shows up as simulated_changes.
 - A client can swap the model or provider of the AI check (it is its own sub-workflow) or leave it out
   (code check only, documented limit).

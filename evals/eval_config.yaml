@@ -10,13 +10,14 @@ date: 2026-10-19
 previous_version: "v2, 2026-10-19, commit b64fb1a (no run recorded against v1 or v2); v1 893fec5"
 why_v4: >-
   Owner decision 2026-10-19 (BLUEPRINT.md v1.6, decision 14; ADR-002), before any gated run: injection
-  screening is the code check OR an AI injection check (Claude Haiku 5.5, fixed prompt). Wording only, no
+  screening is the code check OR an AI injection check (Claude Haiku 5.5, fixed prompt). No
   threshold, metric, case or grading change. Consequences for the runs: the AI check is part of the
   automation, so every case (simulated and live) makes one live call to it; the gated runs need the Anthropic
   API for all cases; "simulated cases identical over the 3 runs" (simulated_changes) still applies; an AI
   check failure in a run is a failure of the automation (needs_review + alert), not an INVALID RUN.
   Note added 2026-10-19 (R4 checkpoint review): that last point is a run-validity rule, not wording only;
-  the owner confirmed it with decision 15 (BLUEPRINT.md v1.7), which adds one retry of the AI check first.
+  the owner confirmed it with decision 15 (BLUEPRINT.md v1.7), which adds one retry of the AI check first
+  (so a case makes two AI-check calls after a retryable API error).
 why_v3: >-
   Owner decision 2026-10-19 (BLUEPRINT.md v1.3, decision 11, U1 and U2), before any run. U1: OK01-OK04 and OK07
   accept ok or ok_after_retry (attempts dropped); on live cases alert and retry rules are scored against the
