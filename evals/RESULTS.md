@@ -35,3 +35,7 @@ miss analysis | changed variables vs previous entry | cost.
 ### 2026-10-19 | visible-4 | development run, NOT GATED
 - Workflows c6cc0e8 (injection check v4), 138 visible cases (SHA-256 bb6c66a9...). Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30, live model claude-sonnet-5-5. Artifact tests/results/visible-4.score.json.
 - Changed variables vs visible-3: injection check v4 (detector red team 3 findings), detector errors go to review.
+
+### 2026-10-19 | visible-5 | development run, NOT GATED
+- Workflows e4c6073 (injection check v5), 138 visible cases (SHA-256 bb6c66a9...). Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30. Artifact tests/results/visible-5.score.json.
+- Changed variables vs visible-4: injection check v5 (detector red team round 4). Fresh-text measure of v4 by red team round 4 (q119-detector-redteam-4.md): 7 of 79 typical attacks missed (8.9%), 0 of 75 typical normal texts flagged.
