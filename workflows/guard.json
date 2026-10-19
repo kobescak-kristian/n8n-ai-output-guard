@@ -1,0 +1,982 @@
+{
+ "name": "Q119 Guard: AI output guard",
+ "nodes": [
+  {
+   "id": "2a8009b5-002b-5507-9c8a-54dc68d39fa7",
+   "name": "Start",
+   "type": "n8n-nodes-base.executeWorkflowTrigger",
+   "typeVersion": 1.3,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "inputSource": "passthrough"
+   }
+  },
+  {
+   "id": "97564fbf-7796-5007-b19d-230381e9758a",
+   "name": "Setup check",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst inp = $input.first().json || {};\nconst t0 = Date.now();\nconst S = {\n  call_id: 'G' + $execution.id + '-' + Math.random().toString(36).slice(2, 7), t0, started_at: new Date(t0).toISOString(),\n  task: String(inp.task || ''), meta: isObj(inp.meta) ? inp.meta : {}, ai_step_id: inp.ai_step_id, ai_input: inp.ai_input,\n  schema: inp.schema, fallback: isObj(inp.fallback) ? inp.fallback : { mode: 'none' }, on_approved_id: inp.on_approved_id || '',\n  options: isObj(inp.options) ? inp.options : {}, calls: [], attempts: 0, second_calls: 0, errors: [], passed: null,\n  passed_second: null, injection: false, injection_hits: [], setup_ok: true, setup_error: '', next: '', wait: 1, wait_used: 0,\n};\nfunction setupFail(msg) { if (S.setup_ok) { S.setup_ok = false; S.setup_error = msg; S.errors.push(msg); } }\ntry {\n  if (!isObj(S.schema)) setupFail('setup: schema missing');\n  else { const e = schemaProblems(S.schema, 'schema', true); if (e.length) setupFail('setup: schema invalid: ' + e.join('; ')); }\n  const ai = S.ai_input;\n  if (ai === undefined || ai === null || (isObj(ai) && stringsIn(ai).join('').trim() === '') || (typeof ai === 'string' && !ai.trim()))\n    setupFail('setup: AI input missing');\n  if (!S.ai_step_id || typeof S.ai_step_id !== 'string') setupFail('setup: AI step missing');\n  const fb = S.fallback;\n  if (!['none', 'default', 'second_step'].includes(fb.mode)) setupFail('setup: unknown fallback mode');\n  else if (fb.mode === 'default' && S.setup_ok) {\n    const pv = isObj(fb.value) ? validate(S.schema, fb.value) : ['the default value must be one JSON object'];\n    if (pv.length) setupFail('setup: default fallback does not match the schema: ' + pv.join('; '));\n  } else if (fb.mode === 'second_step' && !fb.second_step_id) setupFail('setup: second AI step missing');\n  if (S.setup_ok) { S.injection_hits = injectionHits(S.ai_input, S.schema); S.injection = S.injection_hits.length > 0; }\n} catch (err) { setupFail('setup: guard error: ' + err.message); }\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "29582cbe-2d16-559a-b163-9c13986b8471",
+   "name": "Setup ok?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "29582cbe-2d16-559a-b163-9c13986b8471",
+       "leftValue": "={{ $json.setup_ok }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "0625eeb3-1acb-576e-b8b1-a9ad8806e589",
+   "name": "Prepare try 1",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst S = $input.first().json;\nreturn [{ json: { state: S, step: stepInput(S, 'main', 1, null, 0) } }];\n"
+   }
+  },
+  {
+   "id": "cc074ed8-3ef7-5801-943c-4886a00ad8b3",
+   "name": "Step input 1",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "jsCode": "return [{ json: $input.first().json.step }];\n"
+   }
+  },
+  {
+   "id": "fc71451c-6e48-5356-814d-730dc0752906",
+   "name": "Call AI step (try 1)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Prepare try 1').first().json.state.ai_step_id }}"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "8a80b082-6514-55d9-ab86-4e8cab987b61",
+   "name": "Check try 1",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst S = $('Prepare try 1').first().json.state;\nconst r = $input.first().json || {};\nS.attempts = 1;\nconst { c, k } = evalCall(S, r, 'main', 1);\nS.errors.push(...c.errors.map((e) => 'try 1: ' + e));\nif (k.kind === 'setup') {\n  S.attempts = 0; S.setup_ok = false; S.setup_error = 'setup: ' + k.why; S.next = 'done';\n} else if (c.pass) {\n  S.passed = c.value; S.next = 'done';\n} else if (k.kind === 'answer' || k.retry) {\n  S.next = 'retry';\n  S.wait = k.kind === 'answer' ? 1 : Math.max(1, k.wait || 1);\n  S.error_list = k.kind === 'answer' ? c.errors : null;\n} else {\n  S.next = fallbackNext(S);\n}\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "5c1f99c7-a468-5e50-851b-730c4f439e83",
+   "name": "Retry?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1820,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "5c1f99c7-a468-5e50-851b-730c4f439e83",
+       "leftValue": "={{ $json.next === 'retry' }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "7f700669-7b6b-5212-ab36-d311f812e3b0",
+   "name": "Wait before retry",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    2080,
+    180
+   ],
+   "parameters": {
+    "resume": "timeInterval",
+    "amount": "={{ $json.wait }}",
+    "unit": "seconds"
+   },
+   "webhookId": "850a98d2-5968-5463-91a1-6027989982e6"
+  },
+  {
+   "id": "5d4601fd-fa5a-544d-92e7-75fbbdab172d",
+   "name": "Prepare try 2",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2340,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst S = $input.first().json;\nS.wait_used = S.wait;\nreturn [{ json: { state: S, step: stepInput(S, 'main', 2, S.error_list, 0) } }];\n"
+   }
+  },
+  {
+   "id": "1081668d-423d-5f05-9c02-28db3dae3fef",
+   "name": "Step input 2",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2600,
+    180
+   ],
+   "parameters": {
+    "jsCode": "return [{ json: $input.first().json.step }];\n"
+   }
+  },
+  {
+   "id": "de97545e-e938-560c-8e82-5a49b95fb67c",
+   "name": "Call AI step (try 2)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    2860,
+    180
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Prepare try 2').first().json.state.ai_step_id }}"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "593e4c36-36ea-57be-a52f-840f5aac6ebb",
+   "name": "Check try 2",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3120,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst S = $('Prepare try 2').first().json.state;\nconst r = $input.first().json || {};\nS.attempts = 2;\nconst { c, k } = evalCall(S, r, 'main', 2);\nS.errors.push(...c.errors.map((e) => 'try 2: ' + e));\nif (k.kind === 'setup') { S.setup_ok = false; S.setup_error = 'setup: ' + k.why; S.next = 'done'; }\nelse if (c.pass) { S.passed = c.value; S.next = 'done'; }\nelse S.next = fallbackNext(S);\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "d5cfef5e-cabd-5ebb-995c-26a1aab52711",
+   "name": "Second step?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    3380,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "d5cfef5e-cabd-5ebb-995c-26a1aab52711",
+       "leftValue": "={{ $json.next === 'second' }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "c4cf1ac8-2e0c-53ad-ba37-e2bb3e088073",
+   "name": "Prepare second",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3640,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst S = $input.first().json;\nS.wait_used = 0;\nreturn [{ json: { state: S, step: stepInput(S, 'second', 1, null, 0) } }];\n"
+   }
+  },
+  {
+   "id": "7bf6bbbd-7a43-5f50-880b-a24628c00db3",
+   "name": "Step input 3",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3900,
+    180
+   ],
+   "parameters": {
+    "jsCode": "return [{ json: $input.first().json.step }];\n"
+   }
+  },
+  {
+   "id": "e2595c3a-6202-5681-9a62-eaa70730509f",
+   "name": "Call second AI step",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    4160,
+    180
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Prepare second').first().json.state.fallback.second_step_id }}"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "6e42484b-0d3b-5bab-b8ce-362b07bee59b",
+   "name": "Check second",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4420,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst S = $('Prepare second').first().json.state;\nconst r = $input.first().json || {};\nS.second_calls = 1;\nconst { c } = evalCall(S, r, 'second', 1);\nS.errors.push(...c.errors.map((e) => 'second AI step: ' + e));\nif (c.pass) S.passed_second = c.value;\nS.next = 'done';\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "b24db6bb-17ed-52f2-88ee-438bb3c0f389",
+   "name": "Decide",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4680,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const S = $input.first().json;\nconst last = S.calls[S.calls.length - 1];\nconst apiFail = (c) => !!c && (c.kind === 'api' || c.kind === 'transport');\nconst any4xx = S.calls.some((c) => c.kind === 'api' && c.http >= 400 && c.http < 500 && c.http !== 408 && c.http !== 429);\nlet status, data = null, source = null, reason = '';\nif (!S.setup_ok) { status = 'failed'; reason = S.setup_error; }\nelse if (S.injection) { status = 'needs_review'; reason = 'possible prompt injection in the input (' + S.injection_hits.join(', ') + ')'; }\nelse if (S.passed !== null) { status = S.attempts === 1 ? 'ok' : 'ok_after_retry'; data = S.passed; source = 'ai'; }\nelse if (S.fallback.mode === 'default') { status = 'fallback'; data = S.fallback.value; source = 'fallback'; reason = 'AI answer failed; the default value was used'; }\nelse if (S.passed_second !== null) { status = 'fallback'; data = S.passed_second; source = 'fallback'; reason = 'AI answer failed; the second AI step was used'; }\nelse { status = 'needs_review'; reason = 'no valid answer' + (last && last.errors.length ? ': ' + last.errors.join('; ') : ''); }\nlet alert = false;\nif (status === 'failed' || status === 'fallback') alert = true;\nelse if (status === 'needs_review') alert = apiFail(last) || any4xx;\nS.final = { status, data, source, reason, alert, review: status === 'needs_review' };\nS.review_id = S.final.review ? 'R-' + S.call_id : '';\nconst lastMain = S.calls.filter((c) => c.role === 'main').slice(-1)[0] || {};\nconst ans = lastMain.raw === undefined || lastMain.raw === null ? '(no answer)' : String(lastMain.raw).slice(0, 400);\nS.review_text = `:mag: *AI answer needs a person* (${S.task || 'AI step'})\n*Why:* ${reason.slice(0, 500)}\n*Input:* ${JSON.stringify(S.ai_input).slice(0, 300)}\n*Last AI answer:* ${ans}\n*Review:* http://localhost:5678/webhook/q119-review?id=${S.review_id}`;\nS.alert_text = `:rotating_light: *AI output guard alert* (${S.task || 'AI step'})\n*Status:* ${status}\n*Reason:* ${reason.slice(0, 500)}\n*Errors:* ${S.errors.slice(-3).join(' | ').slice(0, 500)}\n*Call:* ${S.call_id}`;\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "648dd850-e277-5b2c-afaf-809390812b7d",
+   "name": "Review?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    4940,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "648dd850-e277-5b2c-afaf-809390812b7d",
+       "leftValue": "={{ $json.final.review }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "9ce28023-ff0c-5b34-9853-8821af042359",
+   "name": "Queue row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    5200,
+    180
+   ],
+   "parameters": {
+    "jsCode": "const S = $input.first().json;\nconst raws = S.calls.filter((c) => c.role === 'main').map((c) => (c.raw === undefined ? null : c.raw));\nconst excerpt = JSON.stringify(S.ai_input).slice(0, 600);\nreturn [{ json: {\n  review_id: S.review_id, call_id: S.call_id, case_id: String(S.meta.case_id || ''), run_label: String(S.meta.run_label || ''),\n  task: S.task, status: 'pending', reason: S.final.reason.slice(0, 900), input_excerpt: excerpt,\n  answers: JSON.stringify(raws), passed_answer: S.passed === null ? '' : JSON.stringify(S.passed),\n  schema: JSON.stringify(S.schema), on_approved_id: String(S.on_approved_id || ''), created_at: new Date().toISOString(),\n  decided_at: '', decision: '', final_data: '', decision_note: '',\n} }];\n"
+   }
+  },
+  {
+   "id": "f837f430-ee5d-5dbf-a846-ebc6625628e7",
+   "name": "Add to review queue",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    5460,
+    180
+   ],
+   "parameters": {
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_queue"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "8dcb7e82-a6a0-599c-8d6b-a8b832e656aa",
+   "name": "Slack review message",
+   "type": "n8n-nodes-base.slack",
+   "typeVersion": 2.3,
+   "position": [
+    5720,
+    180
+   ],
+   "parameters": {
+    "authentication": "accessToken",
+    "select": "channel",
+    "channelId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "#ai-review"
+    },
+    "text": "={{ $('Decide').first().json.review_text }}",
+    "otherOptions": {
+     "includeLinkToWorkflow": false
+    }
+   },
+   "credentials": {
+    "slackApi": {
+     "id": "__CRED:slackApi__",
+     "name": "Slack n8n-output-guard"
+    }
+   },
+   "onError": "continueRegularOutput",
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 2000
+  },
+  {
+   "id": "8c914827-80ed-5aff-83db-01f678345b41",
+   "name": "After review",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    5980,
+    180
+   ],
+   "parameters": {
+    "jsCode": "const S = $('Decide').first().json;\nconst q = $('Add to review queue').first().json || {};\nconst s = $input.first().json || {};\nS.queue_row_id = q.id === undefined ? null : q.id;\nS.queue_error = q.error ? String(q.error.message || q.error).slice(0, 300) : '';\nS.review_ts = s.ts || (s.message && s.message.ts) || '';\nS.review_slack_error = S.review_ts ? '' : String((s.error && (s.error.message || s.error)) || 'no message ts').slice(0, 300);\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "ead54ea0-6707-5d2a-9135-4c3c3d20d2a9",
+   "name": "Alert?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    6240,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "ead54ea0-6707-5d2a-9135-4c3c3d20d2a9",
+       "leftValue": "={{ $json.final.alert }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "044b5cdf-ce88-5f44-9b81-458ab509bc56",
+   "name": "Slack alert",
+   "type": "n8n-nodes-base.slack",
+   "typeVersion": 2.3,
+   "position": [
+    6500,
+    180
+   ],
+   "parameters": {
+    "authentication": "accessToken",
+    "select": "channel",
+    "channelId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "#ai-review"
+    },
+    "text": "={{ $('Alert?').first().json.alert_text }}",
+    "otherOptions": {
+     "includeLinkToWorkflow": false
+    }
+   },
+   "credentials": {
+    "slackApi": {
+     "id": "__CRED:slackApi__",
+     "name": "Slack n8n-output-guard"
+    }
+   },
+   "onError": "continueRegularOutput",
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 2000
+  },
+  {
+   "id": "1cbd75f2-42ce-5fca-a4c6-85d08ed67d28",
+   "name": "After alert",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    6760,
+    180
+   ],
+   "parameters": {
+    "jsCode": "const S = $('Alert?').first().json;\nconst s = $input.first().json || {};\nS.alert_ts = s.ts || (s.message && s.message.ts) || '';\nS.alert_error = S.alert_ts ? '' : String((s.error && (s.error.message || s.error)) || 'no message ts').slice(0, 300);\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "afc4f080-eeb2-5298-86ba-4cb8debba5c1",
+   "name": "Final state",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    7020,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const S = $input.first().json;\nS.seconds = Math.round((Date.now() - S.t0) / 100) / 10;\nS.alert_ts = S.alert_ts || '';\nreturn [{ json: S }];\n"
+   }
+  },
+  {
+   "id": "44e784b5-efe4-5e82-83b7-c33ff192944c",
+   "name": "Log row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    7280,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const S = $input.first().json;\nconst calls = S.calls.map((c) => { const x = Object.assign({}, c); delete x.value; return x; });\nconst sum = (k) => S.calls.reduce((a, c) => a + (Number(c[k]) || 0), 0);\nconst model = (S.calls.find((c) => c.model) || {}).model || '';\nreturn [{ json: {\n  call_id: S.call_id, task: S.task, case_id: String(S.meta.case_id || ''), run_label: String(S.meta.run_label || ''),\n  status: S.final.status, attempts: S.attempts, second_step_calls: S.second_calls, errors: JSON.stringify(S.errors),\n  calls: JSON.stringify(calls), injection: !!S.injection, injection_hits: JSON.stringify(S.injection_hits),\n  alert_wanted: !!S.final.alert, alert_ts: S.alert_ts || '', alert_error: S.alert_error || '',\n  review_id: S.review_id || '', review_ts: S.review_ts || '', review_error: S.review_slack_error || S.queue_error || '',\n  started_at: S.started_at, seconds: S.seconds, model, tokens_in: sum('tokens_in'), tokens_out: sum('tokens_out'),\n  data: S.final.data === null ? '' : JSON.stringify(S.final.data), source: S.final.source || '', reason: S.final.reason.slice(0, 900),\n} }];\n"
+   }
+  },
+  {
+   "id": "608709d5-2d4b-546b-b846-f76d0105b1de",
+   "name": "Write log",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    7540,
+    0
+   ],
+   "parameters": {
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_log"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "3d2eca76-097e-58be-ae64-e2202345a039",
+   "name": "Result",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    7800,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const S = $('Final state').first().json;\nconst w = $input.first().json || {};\nreturn [{ json: {\n  status: S.final.status, data: S.final.data, errors: S.errors, attempts: S.attempts, second_step_calls: S.second_calls,\n  review_id: S.review_id || null, log_id: S.call_id, source: S.final.source, injection: !!S.injection,\n  log_written: w.id !== undefined,\n} }];\n"
+   }
+  }
+ ],
+ "connections": {
+  "Start": {
+   "main": [
+    [
+     {
+      "node": "Setup check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Setup check": {
+   "main": [
+    [
+     {
+      "node": "Setup ok?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Setup ok?": {
+   "main": [
+    [
+     {
+      "node": "Prepare try 1",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Decide",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepare try 1": {
+   "main": [
+    [
+     {
+      "node": "Step input 1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Step input 1": {
+   "main": [
+    [
+     {
+      "node": "Call AI step (try 1)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call AI step (try 1)": {
+   "main": [
+    [
+     {
+      "node": "Check try 1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Check try 1": {
+   "main": [
+    [
+     {
+      "node": "Retry?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Retry?": {
+   "main": [
+    [
+     {
+      "node": "Wait before retry",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Second step?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Wait before retry": {
+   "main": [
+    [
+     {
+      "node": "Prepare try 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepare try 2": {
+   "main": [
+    [
+     {
+      "node": "Step input 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Step input 2": {
+   "main": [
+    [
+     {
+      "node": "Call AI step (try 2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call AI step (try 2)": {
+   "main": [
+    [
+     {
+      "node": "Check try 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Check try 2": {
+   "main": [
+    [
+     {
+      "node": "Second step?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Second step?": {
+   "main": [
+    [
+     {
+      "node": "Prepare second",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Decide",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepare second": {
+   "main": [
+    [
+     {
+      "node": "Step input 3",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Step input 3": {
+   "main": [
+    [
+     {
+      "node": "Call second AI step",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call second AI step": {
+   "main": [
+    [
+     {
+      "node": "Check second",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Check second": {
+   "main": [
+    [
+     {
+      "node": "Decide",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Decide": {
+   "main": [
+    [
+     {
+      "node": "Review?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Review?": {
+   "main": [
+    [
+     {
+      "node": "Queue row",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Alert?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Queue row": {
+   "main": [
+    [
+     {
+      "node": "Add to review queue",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Add to review queue": {
+   "main": [
+    [
+     {
+      "node": "Slack review message",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Slack review message": {
+   "main": [
+    [
+     {
+      "node": "After review",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "After review": {
+   "main": [
+    [
+     {
+      "node": "Alert?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Alert?": {
+   "main": [
+    [
+     {
+      "node": "Slack alert",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Final state",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Slack alert": {
+   "main": [
+    [
+     {
+      "node": "After alert",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "After alert": {
+   "main": [
+    [
+     {
+      "node": "Final state",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Final state": {
+   "main": [
+    [
+     {
+      "node": "Log row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log row": {
+   "main": [
+    [
+     {
+      "node": "Write log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write log": {
+   "main": [
+    [
+     {
+      "node": "Result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

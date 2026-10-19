@@ -1,0 +1,134 @@
+{
+ "name": "Q119 Test: caller",
+ "nodes": [
+  {
+   "id": "fab2d4c7-1bea-5446-b36f-2a66e3604c37",
+   "name": "Test request",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "q119-test",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "46d4b785-de0d-5865-b23a-722b25bcbc2d"
+  },
+  {
+   "id": "162f4a7e-11dd-5150-a1a2-cc5898fa35cd",
+   "name": "Guard input",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const b = $input.first().json.body || {};\nreturn [{ json: Object.assign({}, b.guard_input || {}, { _t0: Date.now() }) }];\n"
+   }
+  },
+  {
+   "id": "92ceae79-5e49-594d-afc4-a4ad8e9a9eb5",
+   "name": "Call the guard",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "__WF:guard__"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "6ee86636-e500-5174-83b5-f44cbb1056e5",
+   "name": "Wrap",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const t0 = $('Guard input').first().json._t0;\nreturn [{ json: { result: $input.first().json, seconds: (Date.now() - t0) / 1000 } }];\n"
+   }
+  },
+  {
+   "id": "46d76da0-192d-5737-9f35-5b7a2a03d0be",
+   "name": "Send result",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json) }}",
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Test request": {
+   "main": [
+    [
+     {
+      "node": "Guard input",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guard input": {
+   "main": [
+    [
+     {
+      "node": "Call the guard",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call the guard": {
+   "main": [
+    [
+     {
+      "node": "Wrap",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Wrap": {
+   "main": [
+    [
+     {
+      "node": "Send result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

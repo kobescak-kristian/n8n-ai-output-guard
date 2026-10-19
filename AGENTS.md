@@ -32,7 +32,9 @@ Starting points, not exhaustive reading lists.
 | Understand or explain the system | `README.md` |
 | Current status or open decisions | `STATE.md` |
 | Test cases, expected results, behaviour rules | `tests/CASES.md`, `tests/make_cases.py`, `tests/cases/` |
-| Eval gate and recorded runs | `evals/eval_config.yaml`, `evals/RESULTS.md` |
+| Eval gate and recorded runs | `evals/eval_config.yaml`, `evals/RESULTS.md`, `evals/PREFLIGHT.md` |
+| Workflows (generated) | `workflows/build.py`, `workflows/guard_js.py`; `--push` loads them into local n8n through `tools/n8n_api.py` |
+| Test runs | `tests/runner.py` (with `tests/mock_server.py`) |
 | Documentation / README / ADR work | the artifact itself; `.githooks/validate_artifacts.py` for enforced structure |
 
 ## Always-on constraints
@@ -57,3 +59,5 @@ Starting points, not exhaustive reading lists.
 
 - Tier 0 structure: `python .githooks/validate_artifacts.py .`
 - Test cases consistent with the reference validator: `python tests/make_cases.py`
+- Test-set checks catch planted mistakes: `python tests/test_make_cases.py`
+- Workflow files regenerate: `python workflows/build.py`

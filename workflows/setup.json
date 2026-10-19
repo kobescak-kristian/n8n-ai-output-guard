@@ -1,0 +1,389 @@
+{
+ "name": "Q119 Setup: create tables",
+ "nodes": [
+  {
+   "id": "08d3fce4-9062-5c16-817b-cd8c2bdaf66f",
+   "name": "Run once",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "q119-setup-tables",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "e9509ea6-fdaa-5390-b6cc-e175b7dea494"
+  },
+  {
+   "id": "b3adfb3c-4ec0-5eb4-8d5a-6ae1fcbd7d19",
+   "name": "Create q119_log",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "create",
+    "tableName": "q119_log",
+    "columns": {
+     "column": [
+      {
+       "name": "call_id",
+       "type": "string"
+      },
+      {
+       "name": "task",
+       "type": "string"
+      },
+      {
+       "name": "case_id",
+       "type": "string"
+      },
+      {
+       "name": "run_label",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string"
+      },
+      {
+       "name": "attempts",
+       "type": "number"
+      },
+      {
+       "name": "second_step_calls",
+       "type": "number"
+      },
+      {
+       "name": "errors",
+       "type": "string"
+      },
+      {
+       "name": "calls",
+       "type": "string"
+      },
+      {
+       "name": "injection",
+       "type": "boolean"
+      },
+      {
+       "name": "injection_hits",
+       "type": "string"
+      },
+      {
+       "name": "alert_wanted",
+       "type": "boolean"
+      },
+      {
+       "name": "alert_ts",
+       "type": "string"
+      },
+      {
+       "name": "alert_error",
+       "type": "string"
+      },
+      {
+       "name": "review_id",
+       "type": "string"
+      },
+      {
+       "name": "review_ts",
+       "type": "string"
+      },
+      {
+       "name": "review_error",
+       "type": "string"
+      },
+      {
+       "name": "started_at",
+       "type": "string"
+      },
+      {
+       "name": "seconds",
+       "type": "number"
+      },
+      {
+       "name": "model",
+       "type": "string"
+      },
+      {
+       "name": "tokens_in",
+       "type": "number"
+      },
+      {
+       "name": "tokens_out",
+       "type": "number"
+      },
+      {
+       "name": "data",
+       "type": "string"
+      },
+      {
+       "name": "source",
+       "type": "string"
+      },
+      {
+       "name": "reason",
+       "type": "string"
+      }
+     ]
+    }
+   },
+   "executeOnce": true,
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "c54f03b4-1f9b-55a8-869c-2d8ca400f886",
+   "name": "Create q119_queue",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "create",
+    "tableName": "q119_queue",
+    "columns": {
+     "column": [
+      {
+       "name": "review_id",
+       "type": "string"
+      },
+      {
+       "name": "call_id",
+       "type": "string"
+      },
+      {
+       "name": "case_id",
+       "type": "string"
+      },
+      {
+       "name": "run_label",
+       "type": "string"
+      },
+      {
+       "name": "task",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string"
+      },
+      {
+       "name": "reason",
+       "type": "string"
+      },
+      {
+       "name": "input_excerpt",
+       "type": "string"
+      },
+      {
+       "name": "answers",
+       "type": "string"
+      },
+      {
+       "name": "passed_answer",
+       "type": "string"
+      },
+      {
+       "name": "schema",
+       "type": "string"
+      },
+      {
+       "name": "on_approved_id",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string"
+      },
+      {
+       "name": "decided_at",
+       "type": "string"
+      },
+      {
+       "name": "decision",
+       "type": "string"
+      },
+      {
+       "name": "final_data",
+       "type": "string"
+      },
+      {
+       "name": "decision_note",
+       "type": "string"
+      }
+     ]
+    }
+   },
+   "executeOnce": true,
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "1818f499-c404-59b2-bb91-5539cb72ae66",
+   "name": "Create q119_approved",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "create",
+    "tableName": "q119_approved",
+    "columns": {
+     "column": [
+      {
+       "name": "review_id",
+       "type": "string"
+      },
+      {
+       "name": "case_id",
+       "type": "string"
+      },
+      {
+       "name": "task",
+       "type": "string"
+      },
+      {
+       "name": "data",
+       "type": "string"
+      },
+      {
+       "name": "at",
+       "type": "string"
+      }
+     ]
+    }
+   },
+   "executeOnce": true,
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "c69e6b1f-ac0a-5f93-a3d3-f47a3942034b",
+   "name": "Create q119_claims",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "create",
+    "tableName": "q119_claims",
+    "columns": {
+     "column": [
+      {
+       "name": "case_id",
+       "type": "string"
+      },
+      {
+       "name": "run_label",
+       "type": "string"
+      },
+      {
+       "name": "workflow",
+       "type": "string"
+      },
+      {
+       "name": "row",
+       "type": "string"
+      },
+      {
+       "name": "at",
+       "type": "string"
+      }
+     ]
+    }
+   },
+   "executeOnce": true,
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "0a2febe6-7c7b-5889-8073-190b3359664e",
+   "name": "Created",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ done: true }) }}",
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Run once": {
+   "main": [
+    [
+     {
+      "node": "Create q119_log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create q119_log": {
+   "main": [
+    [
+     {
+      "node": "Create q119_queue",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create q119_queue": {
+   "main": [
+    [
+     {
+      "node": "Create q119_approved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create q119_approved": {
+   "main": [
+    [
+     {
+      "node": "Create q119_claims",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create q119_claims": {
+   "main": [
+    [
+     {
+      "node": "Created",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

@@ -1,0 +1,110 @@
+{
+ "name": "Q119 AI step: mock (simulated)",
+ "nodes": [
+  {
+   "id": "dbcb8905-3c46-5175-9ee7-b7d138ce259e",
+   "name": "Start",
+   "type": "n8n-nodes-base.executeWorkflowTrigger",
+   "typeVersion": 1.3,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "inputSource": "passthrough"
+   }
+  },
+  {
+   "id": "31686393-f6e6-5ff1-a216-7e8173c006a9",
+   "name": "Build request",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const it = $input.first().json || {};\nreturn [{ json: { body: { case_id: (it.meta || {}).case_id || '', role: it.role || 'main' },\n  timeout_ms: (it.options || {}).timeout_ms || 60000 } }];\n"
+   }
+  },
+  {
+   "id": "66d44fd3-ceb8-5a71-9ee8-635c6019d903",
+   "name": "Call mock AI",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8120/mock",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": "={{ $json.timeout_ms }}",
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true,
+       "responseFormat": "json"
+      }
+     }
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "941f83a6-85ae-5c46-9471-bebeb8d1c5b5",
+   "name": "Normalize answer",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// AI step contract: return http_status, stop_reason, text, retry_after, model, tokens_in, tokens_out\n// (or transport_error); the guard does all checking.\nconst r = $input.first().json || {};\nif (r.statusCode === undefined) {\n  const m = String((r.error && (r.error.message || r.error.description)) || r.error || r.message || 'no response');\n  return [{ json: { transport_error: /time ?out|ETIMEDOUT|ESOCKETTIMEDOUT|timed out|aborted/i.test(m) ? 'timeout' : 'connection closed',\n    error_message: m.slice(0, 300) } }];\n}\nconst status = Number(r.statusCode);\nconst h = r.headers || {};\nconst ra = h['retry-after'] !== undefined ? h['retry-after'] : null;\nif (status !== 200) {\n  return [{ json: { http_status: status, retry_after: ra === null ? null : Number(ra), error_message: JSON.stringify(r.body || '').slice(0, 300) } }];\n}\nconst b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {});\nconst blocks = Array.isArray(b.content) ? b.content : [];\nconst texts = blocks.filter((x) => x && x.type === 'text').map((x) => x.text);\nreturn [{ json: { http_status: 200, stop_reason: b.stop_reason || null, text: texts.length ? texts.join('') : null,\n  model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0, tokens_out: (b.usage || {}).output_tokens || 0 } }];\n"
+   }
+  }
+ ],
+ "connections": {
+  "Start": {
+   "main": [
+    [
+     {
+      "node": "Build request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build request": {
+   "main": [
+    [
+     {
+      "node": "Call mock AI",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call mock AI": {
+   "main": [
+    [
+     {
+      "node": "Normalize answer",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

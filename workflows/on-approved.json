@@ -1,0 +1,83 @@
+{
+ "name": "Q119 Test: on_approved recorder",
+ "nodes": [
+  {
+   "id": "6ecab55e-7087-595d-b1bb-b87301454e1e",
+   "name": "Start",
+   "type": "n8n-nodes-base.executeWorkflowTrigger",
+   "typeVersion": 1.3,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "inputSource": "passthrough"
+   }
+  },
+  {
+   "id": "6c9b2312-3433-5a16-883f-728a4ef94c5c",
+   "name": "Row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const d = $input.first().json || {};\nreturn [{ json: { review_id: String(d.review_id || ''), case_id: String(d.case_id || ''), task: String(d.task || ''),\n  data: JSON.stringify(d.data === undefined ? null : d.data), at: new Date().toISOString() } }];\n"
+   }
+  },
+  {
+   "id": "b27a9eaf-6867-52d7-8c94-4b5214c8619e",
+   "name": "Record call",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_approved"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "onError": "continueRegularOutput"
+  }
+ ],
+ "connections": {
+  "Start": {
+   "main": [
+    [
+     {
+      "node": "Row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Row": {
+   "main": [
+    [
+     {
+      "node": "Record call",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

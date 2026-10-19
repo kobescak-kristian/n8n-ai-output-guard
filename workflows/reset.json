@@ -1,0 +1,245 @@
+{
+ "name": "Q119 Test: reset tables",
+ "nodes": [
+  {
+   "id": "91fe24d7-e923-5ebc-a84d-42d14f11f2a7",
+   "name": "Reset request",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "q119-reset",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "ce5ff119-9efc-59b9-9675-537c7e856e47"
+  },
+  {
+   "id": "9c695493-5c47-5c58-84cf-da523000362b",
+   "name": "Confirmed?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "9c695493-5c47-5c58-84cf-da523000362b",
+       "leftValue": "={{ ($json.body || {}).confirm === 'reset-q119-tables' }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "7ee96bbd-e5f9-5dfe-95f1-334efd905eb2",
+   "name": "Clear q119_log",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "clear",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_log"
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "3da19aec-4d4d-507a-9302-a2915cf36329",
+   "name": "Clear q119_queue",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "clear",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_queue"
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "01279554-c303-5c32-bc81-6daea58a469b",
+   "name": "Clear q119_approved",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "clear",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_approved"
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "ad058eb4-338e-5fdb-9db4-e522578ab06f",
+   "name": "Clear q119_claims",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "clear",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_claims"
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "062d0757-1594-5ff6-8831-413774d91f3c",
+   "name": "Done",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ reset: true }) }}",
+    "options": {}
+   }
+  },
+  {
+   "id": "9d78da69-e8a2-5df6-8e31-ad77ecbf8a80",
+   "name": "Refused",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    520,
+    180
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ reset: false }) }}",
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Reset request": {
+   "main": [
+    [
+     {
+      "node": "Confirmed?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Confirmed?": {
+   "main": [
+    [
+     {
+      "node": "Clear q119_log",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Refused",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clear q119_log": {
+   "main": [
+    [
+     {
+      "node": "Clear q119_queue",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clear q119_queue": {
+   "main": [
+    [
+     {
+      "node": "Clear q119_approved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clear q119_approved": {
+   "main": [
+    [
+     {
+      "node": "Clear q119_claims",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Clear q119_claims": {
+   "main": [
+    [
+     {
+      "node": "Done",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

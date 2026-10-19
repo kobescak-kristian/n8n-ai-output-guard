@@ -1,0 +1,206 @@
+{
+ "name": "Q119 Test: report",
+ "nodes": [
+  {
+   "id": "0ff584ef-5fa9-5b73-b476-6cb29f49a806",
+   "name": "Report request",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "q119-report",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "7e80eb7e-e2f0-5fb0-8df5-0fbf053b97f4"
+  },
+  {
+   "id": "11494f84-29e2-5f57-8c68-476721b472b9",
+   "name": "Log rows",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_log"
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "3cb24df4-d7e4-5130-81e7-ac1c02878795",
+   "name": "Queue rows",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_queue"
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "fbf52d8b-fa82-59aa-870c-e8cd4a19a418",
+   "name": "Approved calls",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_approved"
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "b73b899a-94d3-5fa4-baa7-880cdbe056c0",
+   "name": "Claims rows",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_claims"
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "60cb95b3-f59f-523d-bf70-583c668672c4",
+   "name": "Collect",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const rows = (n) => $(n).all().map((i) => i.json).filter((j) => j && j.id !== undefined);\nreturn [{ json: { log: rows('Log rows'), queue: rows('Queue rows'), approved: rows('Approved calls'), claims: rows('Claims rows') } }];\n"
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "2dd47758-ad8d-5a32-a9d8-39b8d67e01eb",
+   "name": "Send report",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json) }}",
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Report request": {
+   "main": [
+    [
+     {
+      "node": "Log rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log rows": {
+   "main": [
+    [
+     {
+      "node": "Queue rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Queue rows": {
+   "main": [
+    [
+     {
+      "node": "Approved calls",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Approved calls": {
+   "main": [
+    [
+     {
+      "node": "Claims rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Claims rows": {
+   "main": [
+    [
+     {
+      "node": "Collect",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Collect": {
+   "main": [
+    [
+     {
+      "node": "Send report",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

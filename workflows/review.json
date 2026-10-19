@@ -1,0 +1,485 @@
+{
+ "name": "Q119 Review: review form",
+ "nodes": [
+  {
+   "id": "9f94e67b-62e5-5157-a302-07b8be91be1d",
+   "name": "Review submit",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "q119-review-submit",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "d36dc0e6-4a8a-5e6e-869e-75f87dedb5be"
+  },
+  {
+   "id": "17be72bf-bc9f-5335-8892-f42bfd1e1811",
+   "name": "Find review",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_queue"
+    },
+    "returnAll": true,
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "review_id",
+       "condition": "eq",
+       "keyValue": "={{ String(($json.body || {}).id || 'none') }}"
+      }
+     ]
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "id": "7fd58797-36cd-5050-936b-47ef23aa204b",
+   "name": "Review decide",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ---------- shared library (validator, cleaning, injection check) ----------\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst NORMAL_STOPS = ['end_turn', 'stop_sequence'];\n\nfunction deepEq(a, b) {\n  if (typeof a === 'boolean' || typeof b === 'boolean') return a === b;\n  if (typeof a === 'number' && typeof b === 'number') return a === b;\n  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));\n  if (isObj(a) && isObj(b)) {\n    const ka = Object.keys(a), kb = Object.keys(b);\n    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));\n  }\n  return a === b;\n}\n\n// python re.search semantics for the patterns we support: a final $ also matches before one trailing newline\nfunction pyRegex(p) {\n  const src = /(^|[^\\\\])\\$$/.test(p) ? p.slice(0, -1) + '(?=\\\\n?$)' : p;\n  return new RegExp(src);\n}\n\nfunction isDate(s) {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);\n  if (!m) return false;\n  const y = +m[1], mo = +m[2], d = +m[3];\n  if (mo < 1 || mo > 12 || d < 1) return false;\n  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];\n  return d <= dim[mo - 1];\n}\n\nfunction isType(v, t) {\n  switch (t) {\n    case 'null': return v === null;\n    case 'array': return Array.isArray(v);\n    case 'object': return isObj(v);\n    case 'string': return typeof v === 'string';\n    case 'boolean': return typeof v === 'boolean';\n    case 'number': return typeof v === 'number' && Number.isFinite(v);\n    case 'integer': return typeof v === 'number' && Number.isInteger(v);\n    default: return false;\n  }\n}\n\nfunction validate(s, v, path, errs) {\n  errs = errs || [];\n  const label = path || 'answer';\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    if (!ts.some((t) => isType(v, t))) { errs.push(`${label}: must be ${ts.join(' or ')}`); return errs; }\n  }\n  if (s.enum !== undefined && !s.enum.some((e) => deepEq(e, v)))\n    errs.push(`${label}: must be one of ${s.enum.map((x) => JSON.stringify(x)).join(', ')}`);\n  if (typeof v === 'number') {\n    if (s.minimum !== undefined && v < s.minimum) errs.push(`${label}: must be at least ${s.minimum}`);\n    if (s.maximum !== undefined && v > s.maximum) errs.push(`${label}: must be at most ${s.maximum}`);\n  }\n  if (typeof v === 'string') {\n    const n = [...v].length;\n    if (s.minLength !== undefined && n < s.minLength) errs.push(`${label}: at least ${s.minLength} characters`);\n    if (s.maxLength !== undefined && n > s.maxLength) errs.push(`${label}: at most ${s.maxLength} characters`);\n    if (s.pattern !== undefined && !pyRegex(s.pattern).test(v)) errs.push(`${label}: does not match the pattern ${s.pattern}`);\n    if (s.format === 'date' && !isDate(v)) errs.push(`${label}: must be a real date written YYYY-MM-DD`);\n  }\n  if (Array.isArray(v)) {\n    if (s.minItems !== undefined && v.length < s.minItems) errs.push(`${label}: at least ${s.minItems} items`);\n    if (s.maxItems !== undefined && v.length > s.maxItems) errs.push(`${label}: at most ${s.maxItems} items`);\n    if (s.items) v.forEach((x, i) => validate(s.items, x, `${label}[${i}]`, errs));\n  }\n  if (isObj(v)) {\n    const props = s.properties || {};\n    for (const r of s.required || []) if (!(r in v)) errs.push(`${path ? path + '.' : ''}${r}: missing (required)`);\n    for (const k of Object.keys(v)) {\n      const p = path ? `${path}.${k}` : k;\n      if (k in props) validate(props[k], v[k], p, errs);\n      else if (s.additionalProperties === false) errs.push(`${p}: field not allowed`);\n    }\n  }\n  return errs;\n}\n\nconst KNOWN = new Set(['$schema', '$id', '$comment', 'title', 'description', 'default', 'examples', 'type', 'properties',\n  'required', 'additionalProperties', 'enum', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format',\n  'items', 'minItems', 'maxItems']);\nconst TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);\n\nfunction schemaProblems(s, p, top) {\n  p = p || 'schema';\n  const out = [];\n  if (!isObj(s)) return [`${p}: not an object`];\n  for (const k of Object.keys(s)) if (!KNOWN.has(k)) out.push(`${p}: keyword ${k} not supported`);\n  if (s.type !== undefined) {\n    const ts = Array.isArray(s.type) ? s.type : [s.type];\n    for (const t of ts) if (!TYPES.has(t)) out.push(`${p}: unknown type ${JSON.stringify(t)}`);\n  }\n  if (top && s.type !== 'object') out.push(`${p}: the top level must be type object`);\n  if (s.properties !== undefined) {\n    if (!isObj(s.properties)) out.push(`${p}: properties must be an object`);\n    else for (const [k, v] of Object.entries(s.properties)) out.push(...schemaProblems(v, `${p}.${k}`, false));\n  }\n  if (s.items !== undefined) out.push(...schemaProblems(s.items, `${p}[]`, false));\n  if (s.required !== undefined && !(Array.isArray(s.required) && s.required.every((x) => typeof x === 'string')))\n    out.push(`${p}: required must be a list of names`);\n  if (s.additionalProperties !== undefined && typeof s.additionalProperties !== 'boolean')\n    out.push(`${p}: additionalProperties must be true or false`);\n  if (s.enum !== undefined && !Array.isArray(s.enum)) out.push(`${p}: enum must be a list`);\n  if (s.pattern !== undefined) { try { pyRegex(String(s.pattern)); } catch (e) { out.push(`${p}: pattern does not compile`); } }\n  if (s.format !== undefined && s.format !== 'date') out.push(`${p}: format ${s.format} not supported`);\n  for (const k of ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'])\n    if (s[k] !== undefined && typeof s[k] !== 'number') out.push(`${p}: ${k} must be a number`);\n  return out;\n}\n\n// the only repair: text from the first { to the last }, only when the text does not parse as it is (strict JSON)\nfunction cleanParse(text) {\n  if (text === null || text === undefined) return { ok: false, why: 'empty answer' };\n  const t = String(text).trim();\n  if (!t) return { ok: false, why: 'empty answer' };\n  try { return { ok: true, value: JSON.parse(t), cleaned: false }; } catch (e) { /* try cleaning */ }\n  const a = t.indexOf('{'), b = t.lastIndexOf('}');\n  if (a === -1 || b <= a) return { ok: false, why: 'no JSON object in the answer' };\n  try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)), cleaned: true }; }\n  catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }\n}\n\n// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b)\nconst INJ = [\n  ['ignore earlier instructions', /\\b(ignore|disregard|forget|override|bypass)\\b[^.\\n]{0,40}\\b(previous|prior|above|earlier|preceding|all|any|your|system)\\b[^.\\n]{0,30}\\b(instructions?|rules?|prompts?|guidelines?|directions?)\\b/i],\n  ['disregard the above', /\\b(ignore|disregard|forget)\\s+(the\\s+|everything\\s+)?(above|previous)\\s*(text|message|instructions?)?\\s*(and|,|\\.|$)/im],\n  ['new instructions', /\\bnew\\s+instructions?\\b/i],\n  ['you are now', /\\byou\\s+are\\s+now\\s+(a|an|in|my|the)\\b[^.\\n]{0,40}\\b(bot|assistant|mode|model|ai|system|agent)\\b/i],\n  ['mode switch', /\\b(developer|admin|god|debug|jailbreak|unrestricted)\\s+mode\\b/i],\n  ['role line', /^\\s*(system|assistant|developer)\\s*:\\s*(you|ignore|respond|output|return|set|mark|act|from now|always|never)\\b/im],\n  ['role tag', /(###\\s*(instruction|system)\\b|\\[\\/?INST\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|<\\|im_(start|end)\\|>)/i],\n  ['comment to the AI', /<!--[\\s\\S]{0,300}\\b(assistant|system|instructions?|AI|model|output)\\b[\\s\\S]{0,300}-->/i],\n  ['return fixed JSON', /\\b(return|respond|reply|answer|output)\\b[^.\\n]{0,40}\\b(the following|this|exactly|only)\\b[^.\\n]{0,20}\\bjson\\b/i],\n  ['ignore instructions (de)', /\\b(ignorier\\w*|vergiss\\w*|missachte\\w*)\\b[^.\\n]{0,40}\\b(anweisung\\w*|instruktion\\w*|regeln)\\b/i],\n  ['ignore instructions (fr)', /\\b(oubli\\w*|ignor\\w*)\\b[^.\\n]{0,40}\\binstructions?\\b/i],\n  ['ignore instructions (es/it/pt)', /\\b(ignor\\w*|olvid\\w*|esque\\w*|omit\\w*)\\b[^.\\n]{0,40}\\b(instru\\w*|istruzion\\w*|indicazion\\w*|regole|reglas|regras)/i],\n];\nconst ORDER_VERBS = /\\b(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b/i;\n\nfunction stringsIn(v, out) {\n  out = out || [];\n  if (typeof v === 'string') out.push(v);\n  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));\n  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));\n  return out;\n}\n\nfunction injectionHits(input, schema) {\n  const text = stringsIn(input).join('\\n');\n  const hits = INJ.filter(([, re]) => re.test(text)).map(([name]) => name);\n  // an order that names a schema field written as a key (estimated_amount, needs_human ...)\n  const keys = Object.keys((schema && schema.properties) || {}).filter((k) => k.includes('_'));\n  for (const k of keys) {\n    const re = new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`, 'i');\n    const m = re.exec(text);\n    if (m) {\n      const before = text.slice(Math.max(0, m.index - 60), m.index);\n      if (ORDER_VERBS.test(before)) { hits.push(`order naming the field ${k}`); break; }\n    }\n  }\n  return hits;\n}\n\n// what the AI step returned: an answer, an API error, a transport error, or an unknown step\nfunction classify(r) {\n  r = r || {};\n  if (r.http_status === undefined && r.transport_error === undefined && r.text === undefined && r.error !== undefined) {\n    const m = String((r.error && r.error.message) || r.error);\n    if (/not active and cannot be executed|could not be found|does not exist|not found/i.test(m))\n      return { kind: 'setup', why: 'AI step not found or not published' };\n    const code = Number((m.match(/\\b([45]\\d\\d)\\b/) || [])[1] || 0);\n    if (code) return apiKind(code, null);\n    return { kind: 'transport', why: /time ?out|ETIMEDOUT|timed out/i.test(m) ? 'timeout' : 'connection failed', retry: true, wait: 1 };\n  }\n  if (r.transport_error) return { kind: 'transport', why: String(r.transport_error), retry: true, wait: 1 };\n  const code = Number(r.http_status || 200);\n  if (code !== 200) return apiKind(code, r.retry_after);\n  return { kind: 'answer', http: 200 };\n}\n\nfunction apiKind(code, retryAfter) {\n  if (code === 429) {\n    const ra = Number(retryAfter);\n    return { kind: 'api', http: code, retry: true, wait: Number.isFinite(ra) && retryAfter !== null && retryAfter !== '' ? Math.min(Math.max(ra, 0), 20) : 1,\n      retry_after: retryAfter === undefined ? null : retryAfter, why: 'rate limit (HTTP 429)' };\n  }\n  if (code >= 500 || code === 408) return { kind: 'api', http: code, retry: true, wait: 1, why: `API error (HTTP ${code})` };\n  if (code === 401 || code === 403) return { kind: 'api', http: code, retry: false, why: `API key problem: the key was refused (HTTP ${code})` };\n  return { kind: 'api', http: code, retry: false, why: `request refused by the API (HTTP ${code})` };\n}\n\nfunction evalCall(S, r, role, n) {\n  const k = classify(r);\n  const c = { role, n, at_ms: Date.now() - S.t0, wait_before: S.wait_used || 0, kind: k.kind, http: k.http || null,\n    retry_after: k.retry_after === undefined ? null : k.retry_after, why: k.why || '' };\n  S.wait_used = 0;\n  if (k.kind === 'answer') {\n    c.stop_reason = r.stop_reason || null;\n    c.raw = r.text === undefined ? null : r.text;\n    c.model = r.model || '';\n    c.tokens_in = Number(r.tokens_in) || 0;\n    c.tokens_out = Number(r.tokens_out) || 0;\n    const errs = [];\n    if (!NORMAL_STOPS.includes(c.stop_reason)) errs.push(`the answer stopped early (stop reason: ${c.stop_reason || 'none'})`);\n    const p = cleanParse(c.raw);\n    c.parse_ok = false; c.schema_verdict = null;\n    if (!p.ok) errs.push(p.why);\n    else if (!isObj(p.value)) errs.push('the answer must be one JSON object');\n    else {\n      const v = validate(S.schema, p.value);\n      c.parse_ok = true; c.cleaned = p.cleaned; c.schema_verdict = v.length === 0;\n      errs.push(...v);\n      if (errs.length === 0) c.value = p.value;\n    }\n    c.errors = errs; c.pass = errs.length === 0;\n  } else {\n    c.errors = [k.why]; c.pass = false;\n  }\n  S.calls.push(c);\n  return { c, k };\n}\n\nfunction fallbackNext(S) {\n  return S.fallback && S.fallback.mode === 'second_step' && !S.injection ? 'second' : 'done';\n}\n\nfunction timeoutMs(S, waitSeconds) {\n  const per = 1000 * (Number(S.options.timeout_seconds) || 60);\n  const left = 170000 - (Date.now() - S.t0) - 1000 * (waitSeconds || 0);\n  return Math.max(1000, Math.min(per, left));\n}\n\nfunction stepInput(S, role, attempt, errorList, waitSeconds) {\n  return { role, attempt, ai_input: S.ai_input, error_list: errorList || null, meta: S.meta,\n    options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };\n}\n\nconst form = ($('Review submit').first().json || {}).body || {};\nconst rows = $('Find review').all().map((i) => i.json).filter((r) => r && r.id !== undefined);\nconst row = rows[0];\nconst action = String(form.action || '');\nconst out = { ok: false, reason: '', row_id: row ? row.id : null, call: false, final: null, new_status: '',\n  review_id: String(form.id || ''), on_approved_id: row ? row.on_approved_id : '', case_id: row ? row.case_id : '', task: row ? row.task : '' };\nif (!row) out.reason = 'unknown review id';\nelse if (row.status !== 'pending') out.reason = 'already decided (' + row.status + ')';\nelse if (action === 'reject') { out.ok = true; out.new_status = 'rejected'; }\nelse if (action === 'approve') {\n  if (!row.passed_answer) out.reason = 'no checked answer to approve: correct it or reject it';\n  else { out.ok = true; out.new_status = 'approved'; out.final = JSON.parse(row.passed_answer); out.call = true; }\n} else if (action === 'correct') {\n  let data = form.data;\n  try { if (typeof data === 'string') data = JSON.parse(data); } catch (e) { data = undefined; }\n  if (!isObj(data)) out.reason = 'the correction is not one JSON object';\n  else {\n    const errs = validate(JSON.parse(row.schema), data);\n    if (errs.length) out.reason = 'the correction fails the checks: ' + errs.join('; ');\n    else { out.ok = true; out.new_status = 'corrected'; out.final = data; out.call = true; }\n  }\n} else out.reason = 'unknown action';\nreturn [{ json: out }];\n"
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "6376a415-8865-5216-86dc-d468417dad5b",
+   "name": "Allowed?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "6376a415-8865-5216-86dc-d468417dad5b",
+       "leftValue": "={{ $json.ok }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "7b27289a-d16a-51fe-8b73-a7053ce64766",
+   "name": "Update fields",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const d = $('Review decide').first().json;\nreturn [{ json: { status: d.new_status, decided_at: new Date().toISOString(), decision: d.new_status,\n  final_data: d.final === null ? '' : JSON.stringify(d.final), decision_note: '' } }];\n"
+   }
+  },
+  {
+   "id": "b4616bf6-1cab-5f7d-bca7-c7e601e8172d",
+   "name": "Update queue row",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_queue"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Review decide').first().json.row_id }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "0c84b0e9-3084-532d-bc73-aa9fef29e035",
+   "name": "Call on_approved?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "0c84b0e9-3084-532d-bc73-aa9fef29e035",
+       "leftValue": "={{ $('Review decide').first().json.call }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "1707cba3-894f-5b42-a10e-35f6541c05a8",
+   "name": "on_approved input",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1820,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const d = $('Review decide').first().json;\nreturn [{ json: { review_id: d.review_id, case_id: d.case_id, task: d.task, data: d.final } }];\n"
+   }
+  },
+  {
+   "id": "e408877e-544f-5c2e-b5d6-6a4a46efa580",
+   "name": "Call on_approved",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    2080,
+    0
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Review decide').first().json.on_approved_id }}"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "e55c4286-8f3f-5671-a1cf-86acc92046a1",
+   "name": "Done",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    2340,
+    0
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true, status: $('Review decide').first().json.new_status }) }}",
+    "options": {}
+   }
+  },
+  {
+   "id": "1ef77d90-0eed-58a6-8a63-c10521ed8be3",
+   "name": "Refused",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1040,
+    180
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, reason: $('Review decide').first().json.reason }) }}",
+    "options": {}
+   }
+  },
+  {
+   "id": "d198424e-4be1-5669-bb4f-c5aa533f4b21",
+   "name": "Review page",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    540
+   ],
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "q119-review",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "c87cf947-7bc4-518c-bf0e-1e899032df2d"
+  },
+  {
+   "id": "8b9a2219-584b-513d-bb1b-926e1817fa3e",
+   "name": "Find review item",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    260,
+    540
+   ],
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_queue"
+    },
+    "returnAll": true,
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "review_id",
+       "condition": "eq",
+       "keyValue": "={{ String(($json.query || {}).id || 'none') }}"
+      }
+     ]
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "id": "61ac9282-1733-532b-a18a-c962a8c00868",
+   "name": "Page",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    520,
+    540
+   ],
+   "parameters": {
+    "jsCode": "const id = String((($('Review page').first().json || {}).query || {}).id || '');\nconst row = $('Find review item').all().map((i) => i.json).find((r) => r && r.id !== undefined);\nconst esc = (s) => String(s === undefined || s === null ? '' : s).replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\nlet html;\nif (!row) html = '<p>Unknown review item.</p>';\nelse html = `<h2>AI answer review: ${esc(row.task)}</h2><p><b>Status:</b> ${esc(row.status)}</p><p><b>Why:</b> ${esc(row.reason)}</p>\n<p><b>Input:</b></p><pre>${esc(row.input_excerpt)}</pre><p><b>AI answers:</b></p><pre>${esc(row.answers)}</pre>\n<p><b>Checked answer:</b></p><pre>${esc(row.passed_answer || '(none)')}</pre>\n<form method=\"post\" action=\"http://localhost:5678/webhook/q119-review-submit\">\n<input type=\"hidden\" name=\"id\" value=\"${esc(id)}\">\n<p><textarea name=\"data\" rows=\"12\" cols=\"90\" placeholder=\"corrected JSON (only for Correct)\">${esc(row.passed_answer || '')}</textarea></p>\n<button name=\"action\" value=\"approve\">Approve</button> <button name=\"action\" value=\"correct\">Correct</button> <button name=\"action\" value=\"reject\">Reject</button>\n</form>`;\nreturn [{ json: { html: `<!doctype html><html><head><meta charset=\"utf-8\"><title>Review</title></head><body style=\"font-family:sans-serif;max-width:900px;margin:24px\">${html}</body></html>` } }];\n"
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "c7bb2a35-c8b9-5719-bd6e-d0011d7685f0",
+   "name": "Show page",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    780,
+    540
+   ],
+   "parameters": {
+    "respondWith": "text",
+    "responseBody": "={{ $json.html }}",
+    "options": {
+     "responseHeaders": {
+      "entries": [
+       {
+        "name": "Content-Type",
+        "value": "text/html; charset=utf-8"
+       }
+      ]
+     }
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Review submit": {
+   "main": [
+    [
+     {
+      "node": "Find review",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find review": {
+   "main": [
+    [
+     {
+      "node": "Review decide",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Review decide": {
+   "main": [
+    [
+     {
+      "node": "Allowed?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Allowed?": {
+   "main": [
+    [
+     {
+      "node": "Update fields",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Refused",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Update fields": {
+   "main": [
+    [
+     {
+      "node": "Update queue row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Update queue row": {
+   "main": [
+    [
+     {
+      "node": "Call on_approved?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call on_approved?": {
+   "main": [
+    [
+     {
+      "node": "on_approved input",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Done",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "on_approved input": {
+   "main": [
+    [
+     {
+      "node": "Call on_approved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call on_approved": {
+   "main": [
+    [
+     {
+      "node": "Done",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Review page": {
+   "main": [
+    [
+     {
+      "node": "Find review item",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find review item": {
+   "main": [
+    [
+     {
+      "node": "Page",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Page": {
+   "main": [
+    [
+     {
+      "node": "Show page",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
