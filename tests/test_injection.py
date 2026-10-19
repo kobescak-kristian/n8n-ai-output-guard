@@ -14,6 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "workflows"))
 import guard_js as J  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+import injection_redteam_texts as RT  # noqa: E402
 
 SCHEMAS = {s: json.loads((ROOT / "tests" / "schemas" / f"{s}.json").read_text(encoding="utf-8"))
            for s in ("claim_intake", "ticket_triage", "lead_score")}
@@ -124,7 +126,8 @@ BENIGN = [  # (step, text)
 
 def run_node(items):
     js = J.LIB + "\nconst items = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));\n" \
-        "console.log(JSON.stringify(items.map((it) => injectionHits(it.input, it.schema))));\n"
+        "console.log(JSON.stringify(items.map((it) => { const t0 = Date.now(); " \
+        "const h = injectionHits(it.input, it.schema); return { h, ms: Date.now() - t0 }; })));\n"
     with tempfile.TemporaryDirectory() as d:
         (Path(d) / "inj.js").write_text(js, encoding="utf-8")
         (Path(d) / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
@@ -135,9 +138,18 @@ def run_node(items):
     return json.loads(out.stdout)
 
 
+LONG_INPUTS = [  # must finish in under 1 second each (fix red team finding 2)
+    ("ticket_triage", "Hello." + "\n" * 20000),
+    ("ticket_triage", "." + " " * 20000),
+    ("ticket_triage", "\n ".join([""] * 10000)),
+    ("claim_intake", "Water came through the ceiling. " * 600),
+    ("ticket_triage", "SYSTEM:" + " " * 20000 + "x"),
+]
+
+
 def main():
     cases = json.loads((ROOT / "tests" / "cases" / "visible.json").read_text(encoding="utf-8"))["cases"]
-    rows = []  # (label, step, text, must_flag)
+    rows = []  # (label, step, text, must_flag; None = speed only)
     for c in cases:
         if c.get("kind") == "setup":
             continue
@@ -147,15 +159,25 @@ def main():
             rows.append((c["id"], c["step"], c["input"]["text"], False))
     rows += [("attack %d" % i, s, t, True) for i, (s, t) in enumerate(ATTACKS, 1)]
     rows += [("benign %d" % i, s, t, False) for i, (s, t) in enumerate(BENIGN, 1)]
-    hits = run_node([{"input": {"text": t}, "schema": SCHEMAS[s]} for _, s, t, _ in rows])
+    rows += [("rt-attack %d" % i, s, t, True) for i, (s, t) in enumerate(RT.MISSED_ATTACKS, 1)]
+    rows += [("rt-flagged %d" % i, s, t, False) for i, (s, t) in enumerate(RT.WRONGLY_FLAGGED, 1)]
+    rows += [("rt-normal %d" % i, s, t, False) for i, (s, t) in enumerate(RT.NORMAL_NOT_FLAGGED_OK, 1)]
+    rows += [("long %d" % i, s, t, None) for i, (s, t) in enumerate(LONG_INPUTS, 1)]
+    out = run_node([{"input": {"text": t}, "schema": SCHEMAS[s]} for _, s, t, _ in rows])
     bad = 0
-    for (label, _, text, must), h in zip(rows, hits):
-        if bool(h) != must:
+    for (label, _, text, must), o in zip(rows, out):
+        if must is None:
+            if o["ms"] > 1000:
+                bad += 1
+                print("FAIL %-12s too slow: %d ms on %d characters" % (label, o["ms"], len(text)))
+            continue
+        if bool(o["h"]) != must:
             bad += 1
-            print("FAIL %-10s %s | hits %s | %s" % (label, "should be flagged" if must else "wrongly flagged", h,
+            print("FAIL %-12s %s | hits %s | %s" % (label, "should be flagged" if must else "wrongly flagged", o["h"],
                                                      text.replace("\n", " ")[:110]))
-    print("%d of %d texts wrong (%d must flag, %d must not)" % (bad, len(rows), sum(r[3] for r in rows),
-                                                              sum(not r[3] for r in rows)))
+    print("%d of %d texts wrong (%d must flag, %d must not, %d long inputs under 1 s)" % (
+        bad, len(rows), sum(r[3] is True for r in rows), sum(r[3] is False for r in rows),
+        sum(r[3] is None for r in rows)))
     sys.exit(1 if bad else 0)
 
 

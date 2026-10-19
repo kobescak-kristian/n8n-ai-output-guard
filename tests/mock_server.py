@@ -18,11 +18,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = 8120
 LOCK = threading.Lock()
 SCRIPTS = {}   # (case_id, role) -> list of entries
+FINGERPRINT = ""  # SHA-256 over the loaded case files, in the given order
 COUNTS = {}    # (case_id, role) -> calls so far
 LOG = []
 
 
 def load(paths):
+    global FINGERPRINT
+    import hashlib
+    h = hashlib.sha256()
+    for p in paths:
+        with open(p, "rb") as f:
+            h.update(f.read())
+    FINGERPRINT = h.hexdigest()
     for p in paths:
         with open(p, encoding="utf-8") as f:
             doc = json.load(f)
@@ -61,7 +69,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self._send(200, {"ok": True, "cases": len(SCRIPTS)})
+            return self._send(200, {"ok": True, "cases": len(SCRIPTS), "fingerprint": FINGERPRINT})
         if self.path == "/log":
             with LOCK:
                 return self._send(200, {"log": list(LOG)})

@@ -1,0 +1,191 @@
+{
+ "name": "Q119 Fix kit: claims intake BEFORE (broken)",
+ "nodes": [
+  {
+   "id": "cb8403cc-57a3-5197-8554-444d1cd13e1f",
+   "name": "Claim e-mail (test entry)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "q119-fixkit-before",
+    "responseMode": "lastNode",
+    "responseData": "firstEntryJson",
+    "options": {}
+   },
+   "webhookId": "46282498-5900-5f2d-947b-b9bb082d3c58"
+  },
+  {
+   "id": "1212736a-bede-5cfd-a12f-b101e9e3cfef",
+   "name": "Read e-mail",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const b = $input.first().json.body || {};\nreturn [{ json: { role: 'main', attempt: 1, ai_input: b.ai_input, error_list: null, meta: b.meta || {},\n  options: { max_tokens: (b.options || {}).max_tokens || null, timeout_ms: 60000 } } }];\n"
+   }
+  },
+  {
+   "id": "57cefc5e-023b-50a3-846d-106a4b33fba5",
+   "name": "Ask the AI",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Claim e-mail (test entry)').first().json.body.ai_step_id }}"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   }
+  },
+  {
+   "id": "288e2d2e-2a3c-5b1e-b426-27ff00efd74e",
+   "name": "Parse JSON",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// the original workflow: trust the AI and parse its text\nconst data = JSON.parse($input.first().json.text);\nreturn [{ json: data }];\n"
+   }
+  },
+  {
+   "id": "8ded548f-d6c7-5b1b-b2e3-99fd93360c55",
+   "name": "Claims row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const meta = $('Read e-mail').first().json.meta || {};\nreturn [{ json: { case_id: String(meta.case_id || ''), run_label: String(meta.run_label || ''), workflow: 'before',\n  row: JSON.stringify($input.first().json), at: new Date().toISOString() } }];\n"
+   }
+  },
+  {
+   "id": "eced2dbb-a9b9-5d20-9201-48b9b1b8580c",
+   "name": "Save claim",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_claims"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "f517bdf0-cc8b-5177-80e6-bbbdc4177aea",
+   "name": "Saved",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "jsCode": "return [{ json: { saved: true } }];\n"
+   }
+  }
+ ],
+ "connections": {
+  "Claim e-mail (test entry)": {
+   "main": [
+    [
+     {
+      "node": "Read e-mail",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read e-mail": {
+   "main": [
+    [
+     {
+      "node": "Ask the AI",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask the AI": {
+   "main": [
+    [
+     {
+      "node": "Parse JSON",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parse JSON": {
+   "main": [
+    [
+     {
+      "node": "Claims row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Claims row": {
+   "main": [
+    [
+     {
+      "node": "Save claim",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Save claim": {
+   "main": [
+    [
+     {
+      "node": "Saved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

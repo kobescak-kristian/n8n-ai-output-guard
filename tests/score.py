@@ -161,6 +161,13 @@ def score_run(run, cases):
                 brk.append("waited %.1f s, at least %s s expected" % (ml[1]["at"] - ml[0]["at"], e["min_wait_seconds"]))
         if brk:
             M["retry_break"].append(cid); notes += brk
+        # reported, not gated (3b; adding them to the gate needs an owner decision)
+        if c["kind"] == "prompt_injection" and c.get("obvious_injection") and second:
+            notes.append("REPORTED: second AI step called on a flagged input (3b)")
+        if c["source"] == "simulated" and e.get("min_wait_seconds") and e["min_wait_seconds"] >= 20:
+            ml = mlog.get((cid, "main"), [])
+            if len(ml) >= 2 and ml[1]["at"] - ml[0]["at"] > 25:
+                notes.append("REPORTED: waited %.1f s, cap is 20 s (3b)" % (ml[1]["at"] - ml[0]["at"]))
         # log complete
         good_log = len(rows) == 1 and row.get("status") == st
         M["log"].append((cid, good_log))
@@ -251,8 +258,42 @@ def score_run(run, cases):
     return metrics, critical, per_case
 
 
+def score_fixkit(run, cases):
+    """fix_kit_after_crashes and fix_kit_after_bad_rows (gated, CF3 / CF1); BEFORE numbers reported only."""
+    claims = (run.get("report") or {}).get("claims", []) if isinstance(run.get("report"), dict) else []
+    out = {}
+    for phase in ("before", "after"):
+        crashes = [cid for cid, v in run[phase].items() if v.get("http") != 200 or (v.get("seconds") or 0) > 180]
+        bad, wrong_kept, good = [], [], []
+        for r in (x for x in claims if x.get("workflow") == phase):
+            c = cases.get(r["case_id"])
+            try:
+                row = json.loads(r["row"])
+            except ValueError:
+                row = None
+            valid = isinstance(row, dict) and VALS["claim_intake"].is_valid(row)
+            should_not = c is not None and c["expected"]["status"][0] in ("needs_review", "failed")
+            if not valid:
+                bad.append(r["case_id"])
+            elif should_not:
+                wrong_kept.append(r["case_id"])
+            else:
+                good.append(r["case_id"])
+        out[phase] = {"cases": len(run[phase]), "crashes": crashes, "rows_invalid": bad,
+                      "rows_that_should_not_exist": wrong_kept, "rows_valid": len(good)}
+    out["fix_kit_after_crashes"] = len(out["after"]["crashes"])
+    out["fix_kit_after_bad_rows"] = len(out["after"]["rows_invalid"]) + len(out["after"]["rows_that_should_not_exist"])
+    return out
+
+
 def main():
-    files = [Path(p) for p in sys.argv[1:]]
+    args = sys.argv[1:]
+    fixkit_files = []
+    if "--fixkit" in args:
+        i = args.index("--fixkit")
+        fixkit_files = [Path(p) for p in args[i + 1:]]
+        args = args[:i]
+    files = [Path(p) for p in args]
     runs = [json.loads(f.read_text(encoding="utf-8")) for f in files]
     cases = load_cases(runs[0]["case_files"])
     scored = [score_run(r, cases) for r in runs]
@@ -281,6 +322,19 @@ def main():
     summary = {"runs": per_run, "rate_cases": len(rate_ids), "rate_misses": rate_misses,
                "simulated_changes": sim_changes,
                "fix_kit": "not run in these runs (P5)"}
+    if fixkit_files:
+        fk = [score_fixkit(json.loads(f.read_text(encoding="utf-8")), cases) for f in fixkit_files]
+        summary["fix_kit"] = fk
+        for p, k in zip(per_run, fk):
+            p["metrics"]["fix_kit_after_crashes"] = k["fix_kit_after_crashes"]
+            p["metrics"]["fix_kit_after_bad_rows"] = k["fix_kit_after_bad_rows"]
+            if k["fix_kit_after_crashes"]:
+                p["critical"]["CF3"] = p["critical"]["CF3"] + ["fix kit: " + c for c in k["after"]["crashes"]]
+            if k["fix_kit_after_bad_rows"]:
+                p["critical"]["CF1"] = p["critical"]["CF1"] + ["fix kit: " + c for c in k["after"]["rows_invalid"] + k["after"]["rows_that_should_not_exist"]]
+            p["critical_failures"] = sum(len(v) for v in p["critical"].values())
+    if len(runs) >= 3 and len(fixkit_files) < 3:
+        summary["verdict_note"] = "a gated verdict needs 3 fix-kit runs (one per run)"
     if len(runs) >= 3:
         passed = (all(p["critical_failures"] == 0 and p["code_metrics_ok"] for p in per_run)
                   and not sim_changes and len(rate_ids) >= 30 and len(rate_misses) <= 2)
@@ -288,7 +342,8 @@ def main():
         same_model = len({m for p in per_run for m in p["metrics"]["live_models"]}) <= 1
         passed = passed and same_model
         summary["same_live_model"] = same_model
-        summary["verdict"] = ("FAIL" if any_cf else "NOT ENOUGH CASES" if len(rate_ids) < 30
+        code_fail = (not all(p["code_metrics_ok"] for p in per_run)) or bool(sim_changes) or len(rate_misses) > 2
+        summary["verdict"] = ("FAIL" if any_cf or code_fail else "NOT ENOUGH CASES" if len(rate_ids) < 30
                               else "PASS" if passed else "FAIL")
     else:
         summary["verdict"] = "development run, not gated"
@@ -304,6 +359,12 @@ def main():
             if v:
                 print("   %s: %s" % (k, ", ".join(v)))
     print("rate cases", len(rate_ids), "misses", rate_misses, "| simulated changes", sim_changes)
+    if fixkit_files:
+        for k in summary["fix_kit"]:
+            for phase in ("before", "after"):
+                x = k[phase]
+                print("fix kit %-6s cases %d, crashed %d, invalid rows %d, rows that should not exist %d, valid rows %d" % (
+                    phase, x["cases"], len(x["crashes"]), len(x["rows_invalid"]), len(x["rows_that_should_not_exist"]), x["rows_valid"]))
     print("verdict:", summary["verdict"])
     for i, (_, _, pc) in enumerate(scored):
         for cid, x in pc.items():

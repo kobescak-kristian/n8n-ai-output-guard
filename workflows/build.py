@@ -290,6 +290,71 @@ def build_review():
     return w
 
 
+def build_fixkit_before():
+    """The broken workflow of the fix kit, shaped like research post C-17: claim e-mail -> AI -> JSON.parse
+    -> claims table. No checks, no retry, no review: the way many client workflows are built."""
+    w = WF("fixkit-before", "Q119 Fix kit: claims intake BEFORE (broken)")
+    w.add("Claim e-mail (test entry)", "n8n-nodes-base.webhook", 2.1,
+          {"httpMethod": "POST", "path": "q119-fixkit-before", "responseMode": "lastNode",
+           "responseData": "firstEntryJson", "options": {}}, 0,
+          webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, "q119/q119-fixkit-before")))
+    code(w, "Read e-mail", r"""
+const b = $input.first().json.body || {};
+return [{ json: { role: 'main', attempt: 1, ai_input: b.ai_input, error_list: null, meta: b.meta || {},
+  options: { max_tokens: (b.options || {}).max_tokens || null, timeout_ms: 60000 } } }];
+""", 1)
+    w.add("Ask the AI", "n8n-nodes-base.executeWorkflow", 1.4, {
+        "source": "database",
+        "workflowId": {"__rl": True, "mode": "id", "value": "={{ $('Claim e-mail (test entry)').first().json.body.ai_step_id }}"},
+        "options": {"waitForSubWorkflow": True}}, 2)
+    code(w, "Parse JSON", r"""
+// the original workflow: trust the AI and parse its text
+const data = JSON.parse($input.first().json.text);
+return [{ json: data }];
+""", 3)
+    code(w, "Claims row", r"""
+const meta = $('Read e-mail').first().json.meta || {};
+return [{ json: { case_id: String(meta.case_id || ''), run_label: String(meta.run_label || ''), workflow: 'before',
+  row: JSON.stringify($input.first().json), at: new Date().toISOString() } }];
+""", 4)
+    w.add("Save claim", "n8n-nodes-base.dataTable", 1.1, {
+        "dataTableId": table("q119_claims"),
+        "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []},
+        "options": {}}, 5)
+    code(w, "Saved", "return [{ json: { saved: true } }];", 6)
+    w.chain("Claim e-mail (test entry)", "Read e-mail", "Ask the AI", "Parse JSON", "Claims row", "Save claim", "Saved")
+    return w
+
+
+def build_fixkit_after():
+    """The same workflow after the fix: the AI step goes through the guard, and a Switch on the status
+    decides. Only checked data reaches the claims table; everything else is in the review queue."""
+    w = WF("fixkit-after", "Q119 Fix kit: claims intake AFTER (guarded)")
+    webhook(w, "Claim e-mail (test entry)", "POST", "q119-fixkit-after", 0)
+    code(w, "Guard input", r"""
+const b = $input.first().json.body || {};
+return [{ json: b.guard_input || {} }];
+""", 1)
+    call(w, "AI output guard", "__WF:guard__", 2)
+    if_true(w, "Checked data?", "={{ ['ok', 'ok_after_retry', 'fallback'].includes($json.status) }}", 3)
+    code(w, "Claims row", r"""
+const meta = $('Guard input').first().json.meta || {};
+return [{ json: { case_id: String(meta.case_id || ''), run_label: String(meta.run_label || ''), workflow: 'after',
+  row: JSON.stringify($('AI output guard').first().json.data), at: new Date().toISOString() } }];
+""", 4)
+    w.add("Save claim", "n8n-nodes-base.dataTable", 1.1, {
+        "dataTableId": table("q119_claims"),
+        "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []},
+        "options": {}}, 5, onError="continueRegularOutput")
+    respond(w, "Saved", "={{ JSON.stringify({ result: $('AI output guard').first().json, saved: true }) }}", 6)
+    respond(w, "Not saved", "={{ JSON.stringify({ result: $('AI output guard').first().json, saved: false }) }}", 4, 1)
+    w.chain("Claim e-mail (test entry)", "Guard input", "AI output guard", "Checked data?")
+    w.link("Checked data?", "Claims row", 0)
+    w.link("Checked data?", "Not saved", 1)
+    w.chain("Claims row", "Save claim", "Saved")
+    return w
+
+
 def build_report():
     w = WF("report", "Q119 Test: report")
     webhook(w, "Report request", "GET", "q119-report", 0)
@@ -349,6 +414,7 @@ BUILDERS = [
     ("step-lead_score", lambda: build_live_step("lead_score", "lead score")),
     ("on-approved", build_on_approved), ("guard", build_guard), ("test-caller", build_test_caller),
     ("review", build_review), ("report", build_report), ("reset", build_reset),
+    ("fixkit-before", build_fixkit_before), ("fixkit-after", build_fixkit_after),
 ]
 
 

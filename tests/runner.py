@@ -54,7 +54,15 @@ def http(method, url, body=None, form=None, timeout=60):
 
 def mock_up():
     s, r = http("GET", MOCK + "/health", timeout=3)
-    return r.get("cases") if s == 200 and isinstance(r, dict) else None
+    return r.get("fingerprint") if s == 200 and isinstance(r, dict) else None
+
+
+def fingerprint(files):
+    import hashlib
+    h = hashlib.sha256()
+    for f in files:
+        h.update(Path(f).read_bytes())
+    return h.hexdigest()
 
 
 def script_count(files):
@@ -70,9 +78,8 @@ def script_count(files):
 def ensure_mock(files):
     running = mock_up()
     if running is not None:
-        if running != script_count(files):
-            raise SystemExit("a mock AI server is already running with %s scripts, but these case files need %s: "
-                             "stop it first" % (running, script_count(files)))
+        if running != fingerprint(files):
+            raise SystemExit("a mock AI server is already running with other case files: stop it first")
         return None
     p = subprocess.Popen([sys.executable, "-I", str(ROOT / "tests" / "mock_server.py"), *map(str, files)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -123,6 +130,11 @@ def main():
     for f in files:
         doc = json.loads(f.read_text(encoding="utf-8"))
         cases += doc["cases"] if isinstance(doc, dict) else doc
+    seen, dup = set(), set()
+    for c in cases:
+        (dup if c["id"] in seen else seen).add(c["id"])
+    if dup:
+        raise SystemExit("the same case ID is in more than one case file, nothing run: " + ", ".join(sorted(dup)))
     if a.ids:
         want = a.ids.split(",")
         cases = [c for c in cases if c["id"] in want]

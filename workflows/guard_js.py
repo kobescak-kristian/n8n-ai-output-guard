@@ -5,6 +5,8 @@ with the reference validator (python jsonschema, Draft 2020-12, format checker,
 strict JSON) on every keyword the guard supports.
 """
 
+from inject_js import INJECT  # noqa: E402
+
 LIB = r"""
 // ---------- shared library (validator, cleaning, injection check) ----------
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -17,7 +19,7 @@ function deepEq(a, b) {
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEq(x, b[i]));
   if (isObj(a) && isObj(b)) {
     const ka = Object.keys(a), kb = Object.keys(b);
-    return ka.length === kb.length && ka.every((k) => k in b && deepEq(a[k], b[k]));
+    return ka.length === kb.length && ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEq(a[k], b[k]));
   }
   return a === b;
 }
@@ -131,104 +133,7 @@ function cleanParse(text) {
   catch (e) { return { ok: false, why: 'the answer is not valid JSON' }; }
 }
 
-// obvious instructions aimed at the AI, in several languages (CASES.md rule 6 and 3b).
-// Word edges use Unicode letters (the u flag), so accented and non-Latin words work.
-const B = '(?<![\\p{L}\\p{N}_])';
-const E = '(?![\\p{L}\\p{N}_])';
-const R = (src, flags) => new RegExp(src.replace(/\\b</g, B).replace(/\\b>/g, E), (flags || 'i') + 'u');
-const SENT = '(?:^|\\n|[.!?;]\\s+)\\s*';   // start of a line or of a sentence
-
-const INJ = [
-  // English: ignore/disregard/forget + only filler words + the AI's instructions or rules
-  ['ignore earlier instructions', R('\\b<(ignore|disregard|forget|override|bypass)\\s+((all|any|every|the|your|previous|prior|above|earlier|preceding|system|of|these|those|original)\\s+){0,4}(instructions?|rules?|prompts?|guidelines?|directions?|directives?)\\b>')],
-  ['ignore the above and order', R('\\b<(ignore|disregard|forget)\\s+(all\\s+(of\\s+)?)?(the\\s+)?(above|previous|preceding)\\s+(text\\s+|message\\s+)?(and|then|,)\\s+(\\w+\\s+){0,2}(set|mark|make|change|put|output|return|give|respond|reply|use|classify|treat|write|answer|act|say|label|rate|score)\\b>')],
-  ['forget everything', R('\\b<(forget|ignore|disregard)\\s+(everything|all)\\s+(you\\s+(were|have\\s+been)\\s+told|above|before|previous|so\\s+far|i\\s+said\\s+before)\\b>')],
-  // a fake role line or tag that gives orders
-  ['role line', R(SENT + '[\\[<(]?\\s*(system|assistant|developer|admin|sys|override)(\\s+(message|prompt|override|note|instructions?))?\\s*[\\]>):]\\s*(.*)$', 'im'), 'role'],
-  ['role tag', R('(<<\\/?SYS>>|<\\|(system|user|assistant|im_start|im_end)\\|>|\\[\\/?(SYSTEM|INST)\\]|<\\/?\\s*(system|assistant|instructions?)\\s*>|(^|\\n)\\s*#{2,}\\s*(new\\s+)?(instructions?|system|response)\\b>)')],
-  ['comment to the AI', R('<!--[\\s\\S]{0,300}?\\b<(assistant|system|instructions?|bot|llm|claude|gpt|chatgpt|ai|model)\\b>[\\s\\S]{0,300}?-->')],
-  // identity and mode switches
-  ['you are now', R('\\b<you\\s+are\\s+now\\s+((an?\\s+[^.\\n]{0,40}\\b<(bot|assistant|model|ai|system|chatbot)\\b>)|(in|entering)\\s+[^.\\n]{0,25}\\b<mode\\b>|(acting|playing|operating|working)\\s+as\\b>|\\w*(bot|gpt)\\b>)')],
-  ['you are now (name)', /\b[Yy]ou\s+are\s+now\s+[A-Z][\w-]*(\s*\d[\d.]*)?\s*([,.]\s*)?(an?\s+(AI|ai|bot|assistant|model)\b|without\b|with\s+no\b|and\s+you\b)/u],
-  ['act as another AI', R('\\b<(act|behave|respond|answer)\\s+(as|like)\\s+(an?\\s+|the\\s+)?((unrestricted|uncensored|unfiltered|different|new|other|evil|jailbroken)\\s+)?(ai|model|bot|assistant|chatbot|llm)\\b>')],
-  ['from now on you', R('\\b<from\\s+now\\s+on,?\\s+you\\s+(are|will|must|should|only|have\\s+to)\\b>')],
-  ['mode switch', R('\\b<(enable|activate|enter|switch\\s+to|turn\\s+on|you\\s+are\\s+(now\\s+)?in|now\\s+in)\\s+([\\w-]+\\s+){0,2}(developer|admin|god|debug|jailbreak|unrestricted|dan)\\s+mode\\b>')],
-  ['attack mode', R('\\b<(god|jailbreak|unrestricted|dan)\\s+mode\\b>')],
-  ['mode on', R(SENT + '(developer|admin)\\s+mode\\s+(is\\s+)?(now\\s+)?(on|enabled|activated)\\b>', 'im')],
-  ['new instructions', R(SENT + '(new|updated|revised)\\s+(system\\s+)?instructions?\\s*:', 'im')],
-  // a fixed answer
-  ['return a fixed answer', R('\\b<(return|respond|reply|answer|output|give|send|print|write)\\b>[^.\\n]{0,40}\\b<(exactly|only|this|the\\s+following)\\b>[^\\n]{0,40}\\{')],
-  ['answer must be', R('\\b<(your|the)\\s+(answer|response|output|reply|json)\\s+(must|should|has\\s+to)\\s+be\\s+(exactly\\s+)?(this\\s*:?\\s*)?\\{')],
-  // other languages: ignore/forget + filler + instructions or rules (imperative forms; never "my" previous ...)
-  ['ignore instructions (de)', R('\\b<(ignorier(e|en\\s+sie)?|vergiss|vergessen\\s+sie|missachte(n\\s+sie)?)\\s+((alle|die|ihre|deine|bisherigen|vorherigen|vorigen|obigen|früheren|vorangegangenen)\\s+){0,3}(anweisungen|instruktionen|regeln|befehle|vorgaben)\\b>')],
-  ['forget everything (de)', R('\\b<vergiss\\s+alles\\b>')],
-  ['ignore instructions (fr)', R('\\b<(ignore[zr]?|oublie[zr]?|ne\\s+tenez\\s+pas\\s+compte\\s+des?|ne\\s+tiens\\s+pas\\s+compte\\s+des?)\\s+((toutes|tous|les|des|vos|tes|précédentes|ci-dessus|anciennes)\\s+){0,3}(instructions|consignes|règles|directives)\\b>')],
-  ['ignore instructions (es)', R('\\b<(ignora|ignore|ignoren|olvida|olvide|olviden|haz\\s+caso\\s+omiso\\s+(de|a))\\s+((todas|todos|las|los|tus|sus|anteriores|previas)\\s+){0,3}(instrucciones|reglas|indicaciones|órdenes)\\b>')],
-  ['forget everything (es)', R('\\b<(olvida|olvide|ignora)\\s+todo\\s+lo\\s+(anterior|dicho|que\\s+te\\s+dije)\\b>')],
-  ['ignore instructions (it)', R('\\b<(ignora|ignorate|dimentica|dimenticate)\\s+((tutte|le|tue|vostre|precedenti)\\s+){0,3}(istruzioni|regole|indicazioni)\\b>')],
-  ['ignore instructions (pt)', R('\\b<(ignore|ignora|ignorem|esqueça|esqueca|esqueçam|desconsidere)\\s+((todas|as|suas|tuas|anteriores|prévias)\\s+){0,3}(instruções|instrucoes|regras|orientações)\\b>')],
-  ['ignore instructions (nl)', R('\\b<(negeer|vergeet)\\s+((alle|de|je|jouw|vorige|eerdere|voorgaande)\\s+){0,3}(instructies|regels|opdrachten)\\b>')],
-  ['ignore instructions (pl)', R('\\b<(zignoruj|ignoruj|zapomnij)\\s+((wszystkie|poprzednie|wcześniejsze|swoje)\\s+){0,3}(instrukcje|polecenia|zasady|reguły)\\b>')],
-  ['ignore instructions (hr/sr/bs)', R('\\b<(zanemari|ignoriraj|ignoriši|zaboravi)\\s+((sve|prethodne|ranije|svoje)\\s+){0,3}(upute|naredbe|instrukcije|pravila|uputstva)\\b>')],
-  ['ignore instructions (ru)', R('\\b<(игнорируй|игнорируйте|проигнорируй|забудь|забудьте)\\s+((все|предыдущие|прежние|свои)\\s+){0,3}(инструкции|указания|правила|команды)\\b>')],
-  ['ignore instructions (tr)', R('\\b<(önceki|tüm|bütün)\\s+(talimatları|kuralları|komutları)\\s+(yok\\s+say|unut|görmezden\\s+gel|dikkate\\s+alma)')],
-  ['ignore instructions (ar)', R('(تجاهل|انس)\\s+(جميع\\s+)?(التعليمات|الأوامر|القواعد)')],
-  ['ignore instructions (zh)', R('(忽略|无视|忘记|忘掉)(掉)?(之前|以上|前面|先前|上面)?(的)?(所有|全部)?(的)?(指令|指示|说明|规则|提示)')],
-  ['ignore instructions (ja)', R('(以前|これまで|上記|前)の(すべての|全ての)?(指示|命令|ルール|指令)を(無視|忘れ)')],
-  ['new instructions (other)', R(SENT + '(neue\\s+anweisungen|nouvelles\\s+instructions|nuevas\\s+instrucciones|nuove\\s+istruzioni|novas\\s+instruções|nieuwe\\s+instructies|nowe\\s+instrukcje|nove\\s+upute|новые\\s+инструкции)\\s*:', 'im')],
-  ['you are now (other)', R('\\b<(du\\s+bist\\s+(jetzt|nun|ab\\s+jetzt)|tu\\s+es\\s+(maintenant|désormais)|vous\\s+êtes\\s+(maintenant|désormais)|ahora\\s+eres|ahora\\s+es\\s+usted|ora\\s+sei|adesso\\s+sei|agora\\s+(você\\s+é|tu\\s+és|és)|jij\\s+bent\\s+nu|je\\s+bent\\s+nu|teraz\\s+jesteś|sada\\s+si|теперь\\s+ты)\\s+[^.\\n]{0,30}(bot|assistent|assistant|asistente|assistente|asystent|asistent|ki|ia|ai|modell|model|modelo|modello|модель|бот|ассистент)\\b>')],
-  ['mode switch (other)', R('(modo\\s+(de\\s+)?desarrollador|modalità\\s+sviluppatore|mode\\s+développeur|entwicklermodus|modo\\s+(de\\s+)?desenvolvedor|ontwikkelaarsmodus|tryb\\s+dewelopera|режим\\s+разработчика)\\s*(activado|activada|attivata|attivo|activé|aktiviert|ativado|geactiveerd|aktywny|включ\\S*|:)')],
-  ['return a fixed answer (other)', R('\\b<(devuelve|devuelva|responde|responda|retorne|retorna|restituisci|rispondi|renvoie|renvoyez|réponds|répondez|gib|antworte|verwende)\\b>[^\\n]{0,60}\\{')],
-];
-
-// orders to the AI: a vocative ("AI:", "Note to the bot:") with a field name or an order verb
-const ADDRESS = R(SENT + '(dear\\s+)?(ai|a\\.i\\.|assistant|bot|chatbot|model|llm|claude|gpt|chatgpt|gemini)\\s*[:,]', 'im');
-const NOTE_TO_AI = R('\\b<(note\\s+(to|for)|to|for|dear|hey|hi|attention)\\s+(the\\s+|any\\s+)?(ai|language\\s+model|llm|model|assistant|bot|chatbot|claude|gpt)(\\s+(reading|processing|that\\s+reads)\\s+this)?\\s*[:,]|\\b<note\\s+(to|for)\\s+(the\\s+)?(ai|bot|assistant|model|llm|system|claude|gpt)\\b>');
-const ORDER = R('\\b<((set|mark|make|change|put|label|classify|categori[sz]e|assign|treat|rate|score|prioriti[sz]e|give)\\s+(this|it|the|all|every|each|as|to|a|an|priority|urgency|category|lead|ticket|claim)|(output|return|respond|reply|answer|write)\\s+(with|only|exactly|the|this|json)|you\\s+(must|should|will|are|have\\s+to)|must\\s+be)\\b>|\\{|\\b<\\w+\\s*=\\s*\\S');
-const ORDER_VERBS = R('\\b<(set|mark|make|change|put|output|return|give|respond|reply|use|marque\\w*|marca\\w*|setze\\w*|metti|imposta|pon\\w*|r[ée]pond\\w*|mettez|d[ée]fini\\w*|restituisci|devuelve|retorne)\\b>');
-
-function stringsIn(v, out) {
-  out = out || [];
-  if (typeof v === 'string') out.push(v);
-  else if (Array.isArray(v)) v.forEach((x) => stringsIn(x, out));
-  else if (isObj(v)) Object.values(v).forEach((x) => stringsIn(x, out));
-  return out;
-}
-
-function injectionHits(input, schema) {
-  const text = stringsIn(input).join('\n');
-  const keys = Object.keys((schema && schema.properties) || {});
-  const fieldWords = keys.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .flatMap((k) => (k.includes('_') ? [k, k.replace(/_/g, '\\s+')] : [k]));
-  const FIELD = fieldWords.length ? R('\\b<(' + fieldWords.join('|') + ')\\b>') : null;
-  const hits = [];
-  for (const [name, re, kind] of INJ) {
-    if (kind === 'role') {
-      const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
-      let m;
-      while ((m = g.exec(text)) !== null) {
-        const rest = m[4] || '';
-        const qualifier = (m[2] || '').toLowerCase();
-        if (/override|instruction/.test(qualifier) || /^override$/i.test(m[1]) || ORDER.test(rest) || (FIELD && FIELD.test(rest))) { hits.push(name); break; }
-        if (m.index === g.lastIndex) g.lastIndex++;
-      }
-    } else if (re.test(text)) hits.push(name);
-  }
-  // vocative to the AI plus a field name or an order
-  if ((ADDRESS.test(text) || NOTE_TO_AI.test(text)) && ((FIELD && FIELD.test(text)) || ORDER.test(text)))
-    hits.push('order addressed to the AI');
-  // an order that names a schema field written as a key (estimated_amount, needs_human ...)
-  for (const k of keys.filter((x) => x.includes('_'))) {
-    const re = R('\\b<' + k + '\\b>');
-    const m = re.exec(text);
-    if (m) {
-      const before = text.slice(Math.max(0, m.index - 60), m.index);
-      const after = text.slice(m.index + k.length, m.index + k.length + 6);
-      if (ORDER_VERBS.test(before) || /^\s*[=:]/.test(after)) { hits.push(`order naming the field ${k}`); break; }
-    }
-  }
-  return [...new Set(hits)];
-}
+__INJECT__
 
 // what the AI step returned: an answer, an API error, a transport error, or an unknown step
 function classify(r) {
@@ -304,6 +209,8 @@ function stepInput(S, role, attempt, errorList, waitSeconds) {
     options: { max_tokens: S.options.max_tokens || null, timeout_ms: timeoutMs(S, waitSeconds) } };
 }
 """
+
+LIB = LIB.replace("__INJECT__", INJECT.strip())
 
 SETUP_CHECK = LIB + r"""
 const inp = $input.first().json || {};

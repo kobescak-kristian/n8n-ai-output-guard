@@ -1,0 +1,239 @@
+{
+ "name": "Q119 Fix kit: claims intake AFTER (guarded)",
+ "nodes": [
+  {
+   "id": "9ce31290-860b-51cf-9881-20dc3d58601a",
+   "name": "Claim e-mail (test entry)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "q119-fixkit-after",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "webhookId": "4f44752f-d2b3-54f3-b94a-85250ee60743"
+  },
+  {
+   "id": "6b550bae-dae7-545d-8f75-f95b5d2a44ab",
+   "name": "Guard input",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const b = $input.first().json.body || {};\nreturn [{ json: b.guard_input || {} }];\n"
+   }
+  },
+  {
+   "id": "f01580f7-7774-5150-9750-38aee8884f47",
+   "name": "AI output guard",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.4,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "source": "database",
+    "workflowId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "__WF:guard__"
+    },
+    "options": {
+     "waitForSubWorkflow": true
+    }
+   },
+   "onError": "continueRegularOutput",
+   "alwaysOutputData": true
+  },
+  {
+   "id": "f66d795b-cc47-5998-adc6-65ae360c9eaf",
+   "name": "Checked data?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "f66d795b-cc47-5998-adc6-65ae360c9eaf",
+       "leftValue": "={{ ['ok', 'ok_after_retry', 'fallback'].includes($json.status) }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   }
+  },
+  {
+   "id": "3c22f5da-37e4-5b6b-ab3b-b558035b2fc1",
+   "name": "Claims row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "jsCode": "const meta = $('Guard input').first().json.meta || {};\nreturn [{ json: { case_id: String(meta.case_id || ''), run_label: String(meta.run_label || ''), workflow: 'after',\n  row: JSON.stringify($('AI output guard').first().json.data), at: new Date().toISOString() } }];\n"
+   }
+  },
+  {
+   "id": "7ad5d021-c75e-549c-95bf-018d6f092c8d",
+   "name": "Save claim",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "q119_claims"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "b1459531-4f02-5164-b403-45b8b55ce7f6",
+   "name": "Saved",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ result: $('AI output guard').first().json, saved: true }) }}",
+    "options": {}
+   }
+  },
+  {
+   "id": "344dc00f-1314-5277-a52b-221950982f65",
+   "name": "Not saved",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.4,
+   "position": [
+    1040,
+    180
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ result: $('AI output guard').first().json, saved: false }) }}",
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Claim e-mail (test entry)": {
+   "main": [
+    [
+     {
+      "node": "Guard input",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guard input": {
+   "main": [
+    [
+     {
+      "node": "AI output guard",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "AI output guard": {
+   "main": [
+    [
+     {
+      "node": "Checked data?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Checked data?": {
+   "main": [
+    [
+     {
+      "node": "Claims row",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Not saved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Claims row": {
+   "main": [
+    [
+     {
+      "node": "Save claim",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Save claim": {
+   "main": [
+    [
+     {
+      "node": "Saved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
