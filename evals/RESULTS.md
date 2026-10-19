@@ -39,3 +39,7 @@ miss analysis | changed variables vs previous entry | cost.
 ### 2026-10-19 | visible-5 | development run, NOT GATED
 - Workflows e4c6073 (injection check v5), 138 visible cases (SHA-256 bb6c66a9...). Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30. Artifact tests/results/visible-5.score.json.
 - Changed variables vs visible-4: injection check v5 (detector red team round 4). Fresh-text measure of v4 by red team round 4 (q119-detector-redteam-4.md): 7 of 79 typical attacks missed (8.9%), 0 of 75 typical normal texts flagged.
+
+### 2026-10-19 | visible-A1 | development run, NOT GATED (option A switched on for this run only)
+- Workflows 3aaf110 with the AI injection check on (runner --classifier; Claude Haiku 5.5, fixed prompt), 138 visible cases. Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30. The AI check said yes on exactly the 28 obvious-injection cases (PI01-PI29 without PI07) and no on the other 110 (incl. the 30 live rate cases and every benign look-alike); 0 AI check errors. Median guard call 2.8 s. Artifact tests/results/visible-A1.score.json.
+- Purpose: evidence for the owner's decision (option A or B); the default stays code check only until that decision.
