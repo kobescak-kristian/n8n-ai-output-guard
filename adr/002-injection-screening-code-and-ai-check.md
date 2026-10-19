@@ -14,11 +14,22 @@ last measure on 100 typical attacks was 13 missed (v5). A Claude Haiku 5.5 check
 prompt missed 0 of the same 100 attacks and flagged 0 of 100 normal texts, with the same answers over three
 runs (decision note q119-decision-injection-check.md in the shared notes; tests/results/exp-classifier-*.json).
 
+Prompt change after the decision (2026-10-19, R2): that first prompt (v1) flagged one normal visible text
+(OK40, a delivery instruction) in one of three runs. A 5-repeat stability test
+(tests/results/exp-stability-*.json) chose prompt v2, which states that text to the company, its staff or a
+courier is normal. Measured on the same texts: prompt v2 on its own flags 0 normal texts and gives the same
+answer every time, but misses 23 of 376 attack texts (prompt v1 missed 1). With the code check alongside,
+the guard misses one of the 376: the recorded known limit (a gated: false case; prompt v1 caught it). 18 of
+the other 22 are caught by the code check for every AI step, and 4 are field orders ("priority low") that it
+catches for the AI step whose fields they name. So the AI check is now tuned
+toward fewer false flags, and the code check carries more of the attack screening.
+
 ## Decision
 
 Every guard call screens the input with both the code check and the AI injection check (a sub-workflow
 called by ID); if either one flags the input, the result is needs_review, and if the AI check fails or gives
-no clear answer, the result is also needs_review, with an alert.
+no clear answer, the result is also needs_review, with an alert. A clear answer is YES or NO as a whole word,
+with only one of the two in the answer; an answer with both or with neither is not clear.
 
 ## Alternatives rejected
 
@@ -41,8 +52,9 @@ no clear answer, the result is also needs_review, with an alert.
 
 ## Verification
 
-Unbuilt as default at the time of writing (built behind a switch in 3aaf110, dev run visible-A1 clean).
-Status moves to Accepted after the gated runs in evals/RESULTS.md show injection_leaks 0 and no false flag
+When this ADR was written, the AI check was built but switched off by default (3aaf110, dev run visible-A1
+clean). Since 7401180 it is on by default; prompt v2 since 6b2aaa3; the clear-answer rule above since the
+R4 fix commit. Status moves to Accepted after the gated runs in evals/RESULTS.md show injection_leaks 0 and no false flag
 on the gated normal cases with the check on, referenced here by entry date and commit.
 
 ## Review

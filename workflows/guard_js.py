@@ -270,7 +270,7 @@ return [{ json: { state: S, step: { text: stringsIn(S.ai_input).join('\n'), meta
 """
 
 READ_INJ = r"""
-// optional AI injection check (owner decision pending, BLUEPRINT.md section 7): code check OR AI check;
+// AI injection check (owner decision 14, BLUEPRINT.md section 7, ADR-002): code check OR AI check;
 // an AI check that fails sends the item to review with an alert (fail-closed, ADR-001)
 const S = $('Prepare injection check').first().json.state;
 const r = $input.first().json || {};
@@ -548,9 +548,10 @@ if (r.statusCode === undefined) return [{ json: { verdict: 'error', error_messag
 if (Number(r.statusCode) !== 200) return [{ json: { verdict: 'error', error_message: 'HTTP ' + r.statusCode } }];
 const b = typeof r.body === 'string' ? JSON.parse(r.body) : (r.body || {});
 const text = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.type === 'text').map((x) => x.text).join('').trim().toUpperCase();
-// the first clear YES or NO in the answer; anything else is an error (fail-closed: the item goes to review)
-const m = /(?:^|[^A-Z])(YES|NO)(?![A-Z])/.exec(text);
-const verdict = m ? m[1].toLowerCase() : 'error';
+// clear answer = YES or NO as a whole word, and only one of the two in the answer; an answer with both,
+// or with neither, is an error (fail-closed: the item goes to review with an alert, ADR-002)
+const found = new Set([...text.matchAll(/(?<![A-Z])(YES|NO)(?![A-Z])/g)].map((x) => x[1]));
+const verdict = found.size === 1 ? [...found][0].toLowerCase() : 'error';
 return [{ json: { verdict, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0, tokens_out: (b.usage || {}).output_tokens || 0,
   error_message: verdict === 'error' ? 'unexpected answer: ' + [...text].slice(0, 60).join('') : '' } }];
 """

@@ -85,7 +85,8 @@ Three AI steps are used, each with its own schema in `tests/schemas/`:
 
 The rules above stay word for word. These lines say how they are read,
 each toward the most literal reading of the text. They change no visible
-expected result (source: R1 red-team report, 2026-10-19).
+expected result (source: R1 red-team report, 2026-10-19; the line "Rule 6, how
+the guard screens" comes from owner decision 14, gate v4).
 
 - **Rule 1, attempts.** `attempts` = calls of the main AI step, including
   calls that ended in an HTTP error, a timeout or a closed connection. The
@@ -122,6 +123,12 @@ expected result (source: R1 red-team report, 2026-10-19).
   fallback is used and the second AI step is not called. The result is
   `needs_review` whatever the fallback setting. Only a setup `failed` wins
   over it. No alert for the injection itself (rule 9).
+- **Rule 6, how the guard screens (gate v4, owner decision 2026-10-19).** The
+  input is screened by a code check and by an AI injection check (a small
+  AI step that answers YES or NO). Either one flagging is enough. If the AI
+  check fails (API error, no clear answer), the item goes to review with an
+  alert. Expected results of the cases do not change: obvious injections
+  are needs_review, normal text is not flagged.
 - **Rule 7, the second AI step.** Its answer goes through the same cleaning
   and checks. It is called once and never retried; an HTTP error or a
   timeout of the second step gives `needs_review`.
@@ -131,19 +138,16 @@ expected result (source: R1 red-team report, 2026-10-19).
   pending and on_approved is not called. Once an item is approved,
   corrected or rejected, a second action on it is refused: on_approved is
   called at most once per item.
-- **Rule 6, how the guard screens (gate v4, owner decision 2026-10-19).** The
-  input is screened by a code check and by an AI injection check (a small
-  AI step that answers YES or NO). Either one flagging is enough. If the AI
-  check fails (API error, no clear answer), the item goes to review with an
-  alert. Expected results of the cases do not change: obvious injections
-  are needs_review, normal text is not flagged.
 - **Rule 9, alert for needs_review.** Alert when the last call (of the main
   AI step, or of the second AI step when it ran last) ended in an HTTP
   error, a timeout or a closed connection, or when any call returned a 4xx
   other than 408 and 429. No alert when the reason is bad answers only or
-  the injection check.
+  an injection flag. An AI injection check that fails (API error, no clear
+  answer) does alert (gate v4, the line "Rule 6, how the guard screens").
 - **Time budget.** A guard call returns within 170 seconds in total: the
-  second AI step gets only the time left. A timed-out call counts as a
+  guard plans its calls with 160 seconds and keeps 10 seconds for n8n; the
+  second AI step gets only the time left. (CF3 counts a call over 180
+  seconds as lost.) A timed-out call counts as a
   timeout (rule 2).
 - **Fix kit.** It runs once per gated run on every claim_intake case with
   the case's own options, fallback and review action. Setup cases run

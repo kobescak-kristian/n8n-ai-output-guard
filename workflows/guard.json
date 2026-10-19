@@ -121,7 +121,7 @@
     -360
    ],
    "parameters": {
-    "jsCode": "// optional AI injection check (owner decision pending, BLUEPRINT.md section 7): code check OR AI check;\n// an AI check that fails sends the item to review with an alert (fail-closed, ADR-001)\nconst S = $('Prepare injection check').first().json.state;\nconst r = $input.first().json || {};\nconst v = String(r.verdict || '').toLowerCase();\nS.ai_injection_check = { verdict: v || 'error', model: r.model || '', tokens_in: r.tokens_in || 0, tokens_out: r.tokens_out || 0 };\nif (v === 'yes') { S.injection = true; S.injection_hits = S.injection_hits.concat(['AI injection check']); }\nelse if (v !== 'no') {\n  S.injection = true; S.classifier_error = true;\n  S.injection_hits = S.injection_hits.concat(['AI injection check unavailable: ' + String(r.error_message || r.error || 'no verdict').slice(0, 200)]);\n}\nreturn [{ json: S }];\n"
+    "jsCode": "// AI injection check (owner decision 14, BLUEPRINT.md section 7, ADR-002): code check OR AI check;\n// an AI check that fails sends the item to review with an alert (fail-closed, ADR-001)\nconst S = $('Prepare injection check').first().json.state;\nconst r = $input.first().json || {};\nconst v = String(r.verdict || '').toLowerCase();\nS.ai_injection_check = { verdict: v || 'error', model: r.model || '', tokens_in: r.tokens_in || 0, tokens_out: r.tokens_out || 0 };\nif (v === 'yes') { S.injection = true; S.injection_hits = S.injection_hits.concat(['AI injection check']); }\nelse if (v !== 'no') {\n  S.injection = true; S.classifier_error = true;\n  S.injection_hits = S.injection_hits.concat(['AI injection check unavailable: ' + String(r.error_message || r.error || 'no verdict').slice(0, 200)]);\n}\nreturn [{ json: S }];\n"
    }
   },
   {
