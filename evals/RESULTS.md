@@ -31,3 +31,7 @@ miss analysis | changed variables vs previous entry | cost.
 - visible-3: workflows 2457446 + 11 new visible cases (injection check v3), 138 visible cases (SHA-256 bb6c66a9...). Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30 (no live input wrongly flagged), live model claude-sonnet-5-5. Artifact tests/results/visible-3.score.json.
 - Changed variables vs visible-1: injection check rewritten twice (code red teams), validator and runner fixes; visible cases added (none changed except U1 earlier). Hold-out not used.
 - Fix kit dev run fixkit-dry (51 visible claim cases, 2457446, not gated): BEFORE 13 crashes, 19 invalid rows, 4 rows that should not exist, 15 valid; AFTER 0 crashes, 0 bad rows, 32 valid rows.
+
+### 2026-10-19 | visible-4 | development run, NOT GATED
+- Workflows c6cc0e8 (injection check v4), 138 visible cases (SHA-256 bb6c66a9...). Runner exit 0, scorer exit 0. Every code metric 1.0, 0 critical failures, rate cases 30 of 30, live model claude-sonnet-5-5. Artifact tests/results/visible-4.score.json.
+- Changed variables vs visible-3: injection check v4 (detector red team 3 findings), detector errors go to review.
