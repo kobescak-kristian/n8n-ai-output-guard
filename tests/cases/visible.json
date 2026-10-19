@@ -1,6 +1,6 @@
 {
  "about": "Visible test cases for the n8n AI output guard (Q-119). Written before the build; expected results are fixed here. Format and behaviour rules: tests/CASES.md. All names, policy numbers and addresses are made up.",
- "version": 1,
+ "version": 2,
  "schemas": {
   "claim_intake": "tests/schemas/claim_intake.json",
   "ticket_triage": "tests/schemas/ticket_triage.json",
@@ -1823,6 +1823,556 @@
     "attempts": 1
    },
    "note": "LIVE: the Q-116 clear-fit lead.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK08",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Subject: FW: New loss - theft at insured residence\n\nPlease open a claim. Insured: Rebecca Thornton, policy HO-339201.\nBreak-in on 2026-10-10 while the family was away for the weekend. Laptop,\njewelry and a camera taken, police report filed. Insured lists the items at\n$4,250 in total. Nobody was home, no injuries.\n\nThanks,\nGlen Ruiz | Senior Account Manager | Ruiz & Pratt Insurance Brokers\nCONFIDENTIALITY NOTICE: This e-mail and any attachments are intended only for\nthe named recipient and may contain confidential information. If you received\nit in error, please delete it and notify the sender."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Broker forward with a long legal footer.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK09",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Policy: AU-771045 | Insured: Kevin O'Brien | DOL: 10/13/2026\nLoss: windshield cracked by a rock on the highway | Est: $480 | Injuries: none\nContact: kevin.obrien@mailbox.example.com"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Claim as a one-line table from a web form; US date format.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK10",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Subject: ER bill while travelling\n\nHello, policy HL-220981, my name is Mei Tanaka. On 2026-10-07 I had an\nallergic reaction at a restaurant and went to the emergency room. I am fine\nnow. The hospital bill is $2,860, I paid it myself and have the receipt."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Health claim with an injury and a paid bill.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK11",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Asunto: siniestro auto\n\nHola, soy Carlos Ibáñez, póliza AU-458812. El 2026-10-11 otro coche me chocó\npor detrás en un semáforo. El taller dice que la reparación cuesta 2.300\ndólares. Nadie resultó herido. Gracias."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Spanish claim e-mail; amount with a dot as thousands separator.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK12",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Subject: dog bite - neighbour\n\nPolicy HO-904417, insured Priya Raman. On 2026-10-06 our dog bit the\nneighbour's hand over the fence. She needed stitches, urgent care bill is\n$1,150 and she asked us to pay it. We want to report it before it gets worse."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Liability claim with an injury to a third person.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK13",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Subject: fence\n\nHi, Greta Lund here, policy PR-662810. The storm on 2026-10-12 blew down about\n40 feet of our wooden fence. The handyman says it will be around twelve\nhundred dollars to replace. No one hurt, not urgent."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Amount written in words.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK14",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "hi this is ray moreno my policy is AU 503377 i got into a fender bender\ntoday october 15 2026 at the gas station backing out the other guy hit my\nrear door shop said like 1800 nobody hurt can someone call me back"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Voice-to-text: no punctuation, policy number with a space.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK15",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Subject: Re: Re: Re: claim PR-447120 updated estimate\n\nHi Sandra,\nthe updated estimate from the contractor is $7,900 (not 6,500 as in my first\nmail, they found more damage behind the drywall). Water leak from the washing\nmachine on 2026-10-01, laundry room and hallway floor. No injuries.\nThomas Becker\n\n> On Oct 3, 2026, Sandra Vale wrote:\n> Thanks Thomas, please send the contractor estimate when you have it.\n>> On Oct 2, 2026, Thomas Becker wrote:\n>> Our washing machine leaked, first estimate $6,500."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Reply chain where the newest mail changes the amount.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK16",
+   "kind": "correct",
+   "step": "claim_intake",
+   "source": "live",
+   "input": {
+    "text": "Subject: phone stolen at a concert\n\nPolicy GD-118420, Oliver Grant. My phone was stolen from my jacket at a\nconcert in Manchester on 2026-10-04. Reported to the police the next day.\nIt cost GBP 899 a year ago. No injuries, just annoyed."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Gadget claim in GBP; type 'other'.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK17",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "Hallo, meine Rechnung für September (Nr. R-20931) zeigt 49 € statt 29 €.\nBitte korrigieren Sie das. Viele Grüße, Jonas Weber"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: German billing ticket.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK18",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "WHY DID YOU CHARGE ME AGAIN 😡😡 i cancelled in august!!! i want my money\nback today or i go to my bank. account: lena.m@mailbox.example.com"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Angry billing ticket with caps and emojis.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK19",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "Hi, I clicked 'forgot password' three times this morning but the reset\nemail never arrives. I checked spam. My login is d.okafor@mailbox.example.com.\nCan you help?"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Account ticket: password reset e-mail missing.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK20",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "Bonjour, j'ai reçu un pull en taille M au lieu de L (commande 55190).\nComment puis-je l'échanger ? Merci, Claire"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: French shipping ticket: wrong size received.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK21",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "Just wanted to say Ahmed from your support team was super helpful yesterday,\nhe sorted my issue in 5 minutes. No question, just thanks!"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Thank-you message with no problem in it.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK22",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "Hello support,\nsince Monday the desktop app shows an error when syncing my files:\n\n  Sync failed: error 0x80070005 (access denied)\n  at FileWatcher.scan (watcher.js:212)\n  retry 3/3 failed\n\nWindows 11, app version 4.2.1. Reinstalled already, same error.\nRegards, Martin Kovac\nIT Coordinator | Kovac Print Shop"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Technical ticket with a pasted error log and a signature.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK23",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "Buongiorno, vorrei annullare il mio abbonamento dal prossimo mese.\nIl mio account è g.rossi@mailbox.example.com. Grazie, Giulia Rossi"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Italian cancellation request.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK24",
+   "kind": "correct",
+   "step": "ticket_triage",
+   "source": "live",
+   "input": {
+    "text": "where is my order 66781??"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: One-line shipping ticket.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK25",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: Dr. Ana Petrov, Practice Manager, BrightSmile Dental Group (brightsmile-dental.example.com).\nMessage: We run 6 dental clinics with about 60 staff. Our front desk calls every patient\nto confirm appointments. We want automatic reminders by SMS and e-mail linked to our\nbooking system. Budget around EUR 5,000, start next month."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Mid-size clinic group with budget and a start date.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK26",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: James Whitaker, Procurement, Halvorsen Industries (halvorsen.example.com).\nMessage: Halvorsen (approx. 2,000 employees) is collecting proposals for workflow\nautomation in finance operations. Please note all vendors must pass our security\nquestionnaire and an RFP process of about 3 months."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Large company with a long buying process.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK27",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: Tim, tim.student@uni-mail.example.com\nMessage: hi I'm a student and need help with my n8n homework, can you do it for free?\nit's due tomorrow"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Student asking for free help: low fit.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK28",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: Sofia Lindgren, Founder, Pixelharbor Agency (pixelharbor.example.com).\nMessage: We are a 12-person marketing agency. Our clients keep asking for automations.\nWe'd like a partner who builds them under our brand, 2-3 projects a month."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Agency wanting a white-label partner.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK29",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: Markus Huber, Huber & Partner Steuerberatung (huber-steuer.example.com).\nMessage: Wir sind ein Steuerbüro mit 15 Mitarbeitern. Belege kommen per E-Mail und\nwerden von Hand in DATEV erfasst. Wir möchten das automatisieren. Budget ist\nvorhanden, Start im Januar."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: German lead: tax office, budget, start in January.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK30",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: (not given), contact: quickfix88@mailbox.example.com\nMessage: need my zapier fixed asap, will pay well"
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Very short lead with almost no information.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK31",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: Rachel Kim, COO, Summit Realty Partners (summitrealty.example.com).\nMessage: 30 agents. New leads from Zillow and our website land in a shared inbox and\nget lost. We need them routed to the right agent and logged in our CRM within 5\nminutes. Approved budget of $8k."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Real estate brokerage with a clear problem and approved budget.",
+   "fallback": {
+    "mode": "none"
+   }
+  },
+  {
+   "id": "OK32",
+   "kind": "correct",
+   "step": "lead_score",
+   "source": "live",
+   "input": {
+    "text": "Name: Joy Mensah, Volunteer Coordinator, Green Streets Community Trust (greenstreets.example.org).\nMessage: We are a small charity (4 staff, 120 volunteers). Volunteer sign-ups come from a\nGoogle Form and we copy them into a spreadsheet by hand. Our budget is very small,\nmaybe a few hundred pounds."
+   },
+   "expected": {
+    "status": [
+     "ok",
+     "ok_after_retry"
+    ],
+    "alert": false,
+    "review_row": false,
+    "data": "equals_last_answer"
+   },
+   "note": "LIVE rate case: Small charity with a tiny budget.",
    "fallback": {
     "mode": "none"
    }

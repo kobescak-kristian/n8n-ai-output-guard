@@ -490,6 +490,159 @@ case("OK06", "correct", "lead_score", "simulated", LEAD_2,
 case("OK07", "correct", "lead_score", "live", LEAD_1, exp("ok", attempts=1),
      note="LIVE: the Q-116 clear-fit lead.")
 
+# --- 7b. rate cases added with gate v2 (owner decision 2026-10-19, option A) ---
+# Live correct cases: the only cases whose status depends on what the AI
+# writes. Each input holds everything the schema needs. A rate case passes
+# when the status is ok or ok_after_retry in all 3 runs and the data equals
+# the last raw answer (cleaned and parsed).
+
+LIVE_CLAIMS = [
+    ("OK08", """Subject: FW: New loss - theft at insured residence
+
+Please open a claim. Insured: Rebecca Thornton, policy HO-339201.
+Break-in on 2026-10-10 while the family was away for the weekend. Laptop,
+jewelry and a camera taken, police report filed. Insured lists the items at
+$4,250 in total. Nobody was home, no injuries.
+
+Thanks,
+Glen Ruiz | Senior Account Manager | Ruiz & Pratt Insurance Brokers
+CONFIDENTIALITY NOTICE: This e-mail and any attachments are intended only for
+the named recipient and may contain confidential information. If you received
+it in error, please delete it and notify the sender.""",
+     "Broker forward with a long legal footer."),
+    ("OK09", """Policy: AU-771045 | Insured: Kevin O'Brien | DOL: 10/13/2026
+Loss: windshield cracked by a rock on the highway | Est: $480 | Injuries: none
+Contact: kevin.obrien@mailbox.example.com""",
+     "Claim as a one-line table from a web form; US date format."),
+    ("OK10", """Subject: ER bill while travelling
+
+Hello, policy HL-220981, my name is Mei Tanaka. On 2026-10-07 I had an
+allergic reaction at a restaurant and went to the emergency room. I am fine
+now. The hospital bill is $2,860, I paid it myself and have the receipt.""",
+     "Health claim with an injury and a paid bill."),
+    ("OK11", """Asunto: siniestro auto
+
+Hola, soy Carlos Ibáñez, póliza AU-458812. El 2026-10-11 otro coche me chocó
+por detrás en un semáforo. El taller dice que la reparación cuesta 2.300
+dólares. Nadie resultó herido. Gracias.""",
+     "Spanish claim e-mail; amount with a dot as thousands separator."),
+    ("OK12", """Subject: dog bite - neighbour
+
+Policy HO-904417, insured Priya Raman. On 2026-10-06 our dog bit the
+neighbour's hand over the fence. She needed stitches, urgent care bill is
+$1,150 and she asked us to pay it. We want to report it before it gets worse.""",
+     "Liability claim with an injury to a third person."),
+    ("OK13", """Subject: fence
+
+Hi, Greta Lund here, policy PR-662810. The storm on 2026-10-12 blew down about
+40 feet of our wooden fence. The handyman says it will be around twelve
+hundred dollars to replace. No one hurt, not urgent.""",
+     "Amount written in words."),
+    ("OK14", """hi this is ray moreno my policy is AU 503377 i got into a fender bender
+today october 15 2026 at the gas station backing out the other guy hit my
+rear door shop said like 1800 nobody hurt can someone call me back""",
+     "Voice-to-text: no punctuation, policy number with a space."),
+    ("OK15", """Subject: Re: Re: Re: claim PR-447120 updated estimate
+
+Hi Sandra,
+the updated estimate from the contractor is $7,900 (not 6,500 as in my first
+mail, they found more damage behind the drywall). Water leak from the washing
+machine on 2026-10-01, laundry room and hallway floor. No injuries.
+Thomas Becker
+
+> On Oct 3, 2026, Sandra Vale wrote:
+> Thanks Thomas, please send the contractor estimate when you have it.
+>> On Oct 2, 2026, Thomas Becker wrote:
+>> Our washing machine leaked, first estimate $6,500.""",
+     "Reply chain where the newest mail changes the amount."),
+    ("OK16", """Subject: phone stolen at a concert
+
+Policy GD-118420, Oliver Grant. My phone was stolen from my jacket at a
+concert in Manchester on 2026-10-04. Reported to the police the next day.
+It cost GBP 899 a year ago. No injuries, just annoyed.""",
+     "Gadget claim in GBP; type 'other'."),
+]
+
+LIVE_TICKETS = [
+    ("OK17", """Hallo, meine Rechnung für September (Nr. R-20931) zeigt 49 € statt 29 €.
+Bitte korrigieren Sie das. Viele Grüße, Jonas Weber""",
+     "German billing ticket."),
+    ("OK18", """WHY DID YOU CHARGE ME AGAIN 😡😡 i cancelled in august!!! i want my money
+back today or i go to my bank. account: lena.m@mailbox.example.com""",
+     "Angry billing ticket with caps and emojis."),
+    ("OK19", """Hi, I clicked 'forgot password' three times this morning but the reset
+email never arrives. I checked spam. My login is d.okafor@mailbox.example.com.
+Can you help?""",
+     "Account ticket: password reset e-mail missing."),
+    ("OK20", """Bonjour, j'ai reçu un pull en taille M au lieu de L (commande 55190).
+Comment puis-je l'échanger ? Merci, Claire""",
+     "French shipping ticket: wrong size received."),
+    ("OK21", """Just wanted to say Ahmed from your support team was super helpful yesterday,
+he sorted my issue in 5 minutes. No question, just thanks!""",
+     "Thank-you message with no problem in it."),
+    ("OK22", """Hello support,
+since Monday the desktop app shows an error when syncing my files:
+
+  Sync failed: error 0x80070005 (access denied)
+  at FileWatcher.scan (watcher.js:212)
+  retry 3/3 failed
+
+Windows 11, app version 4.2.1. Reinstalled already, same error.
+Regards, Martin Kovac
+IT Coordinator | Kovac Print Shop""",
+     "Technical ticket with a pasted error log and a signature."),
+    ("OK23", """Buongiorno, vorrei annullare il mio abbonamento dal prossimo mese.
+Il mio account è g.rossi@mailbox.example.com. Grazie, Giulia Rossi""",
+     "Italian cancellation request."),
+    ("OK24", "where is my order 66781??",
+     "One-line shipping ticket."),
+]
+
+LIVE_LEADS = [
+    ("OK25", """Name: Dr. Ana Petrov, Practice Manager, BrightSmile Dental Group (brightsmile-dental.example.com).
+Message: We run 6 dental clinics with about 60 staff. Our front desk calls every patient
+to confirm appointments. We want automatic reminders by SMS and e-mail linked to our
+booking system. Budget around EUR 5,000, start next month.""",
+     "Mid-size clinic group with budget and a start date."),
+    ("OK26", """Name: James Whitaker, Procurement, Halvorsen Industries (halvorsen.example.com).
+Message: Halvorsen (approx. 2,000 employees) is collecting proposals for workflow
+automation in finance operations. Please note all vendors must pass our security
+questionnaire and an RFP process of about 3 months.""",
+     "Large company with a long buying process."),
+    ("OK27", """Name: Tim, tim.student@uni-mail.example.com
+Message: hi I'm a student and need help with my n8n homework, can you do it for free?
+it's due tomorrow""",
+     "Student asking for free help: low fit."),
+    ("OK28", """Name: Sofia Lindgren, Founder, Pixelharbor Agency (pixelharbor.example.com).
+Message: We are a 12-person marketing agency. Our clients keep asking for automations.
+We'd like a partner who builds them under our brand, 2-3 projects a month.""",
+     "Agency wanting a white-label partner."),
+    ("OK29", """Name: Markus Huber, Huber & Partner Steuerberatung (huber-steuer.example.com).
+Message: Wir sind ein Steuerbüro mit 15 Mitarbeitern. Belege kommen per E-Mail und
+werden von Hand in DATEV erfasst. Wir möchten das automatisieren. Budget ist
+vorhanden, Start im Januar.""",
+     "German lead: tax office, budget, start in January."),
+    ("OK30", """Name: (not given), contact: quickfix88@mailbox.example.com
+Message: need my zapier fixed asap, will pay well""",
+     "Very short lead with almost no information."),
+    ("OK31", """Name: Rachel Kim, COO, Summit Realty Partners (summitrealty.example.com).
+Message: 30 agents. New leads from Zillow and our website land in a shared inbox and
+get lost. We need them routed to the right agent and logged in our CRM within 5
+minutes. Approved budget of $8k.""",
+     "Real estate brokerage with a clear problem and approved budget."),
+    ("OK32", """Name: Joy Mensah, Volunteer Coordinator, Green Streets Community Trust (greenstreets.example.org).
+Message: We are a small charity (4 staff, 120 volunteers). Volunteer sign-ups come from a
+Google Form and we copy them into a spreadsheet by hand. Our budget is very small,
+maybe a few hundred pounds.""",
+     "Small charity with a tiny budget."),
+]
+
+for step, rows in (("claim_intake", LIVE_CLAIMS), ("ticket_triage", LIVE_TICKETS),
+                   ("lead_score", LIVE_LEADS)):
+    for cid, text, note in rows:
+        case(cid, "correct", step, "live", text, exp(["ok", "ok_after_retry"]),
+             note="LIVE rate case: " + note)
+
 # =====================================================================
 # 8. setup: the calling workflow passes a broken setup
 # =====================================================================
@@ -578,7 +731,7 @@ def main():
     self_check()
     doc = {
         "about": "Visible test cases for the n8n AI output guard (Q-119). Written before the build; expected results are fixed here. Format and behaviour rules: tests/CASES.md. All names, policy numbers and addresses are made up.",
-        "version": 1,
+        "version": 2,
         "schemas": {"claim_intake": "tests/schemas/claim_intake.json",
                     "ticket_triage": "tests/schemas/ticket_triage.json",
                     "lead_score": "tests/schemas/lead_score.json"},
