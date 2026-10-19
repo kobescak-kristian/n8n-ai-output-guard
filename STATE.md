@@ -12,6 +12,8 @@ n8n AI output guard and fix kit (sub-workflow around any AI step: schema check, 
 *(New entries on top. Phase closes require evidence: exit codes,
 commit hashes, eval numbers.)*
 
+- **2026-10-19** — BLUEPRINT.md v1.2 (owner requests): aim for one gated attempt, with checkpoints R1 (red team of the gate before P3) to R4 (checkpoint review + dry run of the frozen commit), new phase P5b; every key, credential and app named `n8n-output-guard` (no backlog or item number). Waiting on the owner: n8n API key in the local `.env`, Slack app + n8n credential `Slack n8n-output-guard`, n8n credential `Anthropic n8n-output-guard`.
+
 - **2026-10-19** — P1c: BLUEPRINT.md v1.1 LOCKED by the owner (eval level Critical; `Safeguard removed: human approval before each checked result is returned to the caller`; gate v2 option A). `evals/eval_config.yaml` v2: code checks 100%, rate claim at least 80% with at most 2 misses on at least 30 live correct cases. 25 live correct cases added (OK08-OK32), none edited or removed: `python tests/make_cases.py` exit 0, "wrote 79 cases", SHA-256 d1b36555... on two runs. Totals 110 cases (hold-out 28%). ADR-001 written (Proposed).
 
 - **2026-10-18** — Hold-out sealed by a separate session (never builds the guard): 31 cases (8 live, 23 simulated; 30 gated), commit b022111 `evals/holdout_commitment.json`; builder re-computed the archive SHA-256 = committed value (3935e1a2...). Total 85 cases, hold-out share 36%.

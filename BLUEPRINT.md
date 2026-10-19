@@ -2,7 +2,7 @@
 
 ## 0. Header
 
-- Version: v1.1, 2026-10-19
+- Version: v1.2, 2026-10-19
 - Status: LOCKED 2026-10-19 by Kristian Kobescak (owner answers in the build session).
 - Owner: Kristian Kobescak
 - Build type: portfolio
@@ -52,7 +52,9 @@ Review form -> approve / correct (must pass the schema) / reject -> on_approved 
 Test tools: Python runner, mock AI server on port 8120 (answers like the Anthropic API per case), read-only report workflow.
 ```
 
-Stack: local n8n 2.43.7 (shared; names Q119, tag q119, data tables q119_*, webhooks /webhook/q119-*; never restart, upgrade or reconfigure n8n; never touch other builds' workflows or credentials; full runs announced in n8n-usage.md in the shared notes folder). Claude through the Anthropic workspace created by the owner 2026-10-19 (key only in an n8n credential); default model Sonnet 5.5, recorded per run (model is free to change, eval-gate skill §7). Slack demo workspace, channel #ai-review.
+Stack: local n8n 2.43.7 (shared; names Q119, tag q119, data tables q119_*, webhooks /webhook/q119-*; never restart, upgrade or reconfigure n8n; never touch other builds' workflows or credentials; full runs announced in n8n-usage.md in the shared notes folder). Claude through the Anthropic workspace created by the owner 2026-10-19 (key only in an n8n credential and LastPass); default model Sonnet 5.5, recorded per run (model is free to change, eval-gate skill §7). Slack demo workspace, channel #ai-review.
+
+Key and credential names (owner standard, 2026-10-19): every key, credential and app of this build is named `n8n-output-guard`, with no backlog or item number: n8n credentials `Anthropic n8n-output-guard` and `Slack n8n-output-guard`, n8n API key label `n8n-output-guard`, Slack app `n8n-output-guard`, LastPass entries the same. n8n workflow, tag, table and webhook names keep the Q119 prefix (shared-n8n rule).
 
 Non-negotiables:
 - The guard always returns a status; it never throws and never returns unchecked data (first ADR).
@@ -128,6 +130,7 @@ Eval level: Decided Critical, owner, 2026-10-19
 | P3 | mock server, runner, guard, 3 AI steps, first ADR | dry run on 2 cases, runner exit 0 (not a result); `validate_artifacts.py` clean |
 | P4 | review form + on_approved, alerts, log, report workflow | full visible run recorded in RESULTS.md, runner exit 0 |
 | P5 | fix kit: before/after workflows, FIX_REPORT.md | both runs recorded; AFTER has 0 crashes and 0 bad rows |
+| P5b | pre-gate readiness (aim: the first gated run passes; see 7. decision 9) | R2: 3 full visible runs in a row meet every gate threshold (development runs, labelled not gated); R3: red-team report committed with 0 open breaks; R4: frozen workflow commit with a checkpoint-review verdict OK, dry run on 2 cases exit 0 |
 | P6 | 3 gated runs (visible + hold-out, one frozen workflow commit) | 3 entries in RESULTS.md, runner exit 0; PASS or FAIL recorded |
 | P7 | README in client words + diagram + 5-step plug-in guide + limits, cover image, Loom if top 3-4 | publish gate is a separate owner decision |
 
@@ -143,6 +146,9 @@ Locked (owner, 2026-10-18 plan approval; change only by a dated line in 8.):
 6. Eval level Critical; `Safeguard removed: human approval before each checked result is returned to the caller` (owner, 2026-10-19).
 7. Gate v2 option A: code checks 100%, rate claim 80% with at most 2 misses on at least 30 live correct cases (owner, 2026-10-19). Rejected: options B and C (see 5.).
 
+9. Aim for one gated attempt (owner, 2026-10-19): portfolio builds should not show a series of gated FAILs. A gated FAIL still stays recorded (eval-gate rules 2-3); what changes is the work before the first gated run. Four checkpoints: R1 before P3, a fresh session red-teams the gate itself (unclear rules, expected results a correct guard could miss, a case wrong in itself); a wrong case is fixed only now, by recorded owner decision, before any result. R2 after P4, the visible set passes 3 full runs in a row at gate thresholds. R3 after R2, a fresh session that never builds and never sees the hold-out tries to break the guard on each CASES.md rule; every break becomes a new visible case (allowed before the run) and a fix of the cause. R4 the frozen commit gets a checkpoint review and a 2-case dry run. Only then P6. Why: on item 3 (Q-117) the hold-out found two workflow gaps the visible set did not cover, which cost two gated FAILs. Rejected: fewer recorded runs or hiding FAILs (not allowed); a looser gate (lowers the claim).
+10. Key and credential names `n8n-output-guard`, no backlog or item number (owner, 2026-10-19; see 3.).
+
 Open:
 - n8n slot: free now; Q-117 resumes 2026-10-20 08:00 and Q-119 pauses then until the owner hands n8n back — owner.
 - `gh repo create` (private) — owner, before the first push (in progress 2026-10-19).
@@ -150,5 +156,6 @@ Open:
 
 ## 8. Version log
 
+- v1.2 2026-10-19: owner requests: aim for one gated attempt (decision 9, phase P5b); key and credential names (decision 10).
 - v1.1 2026-10-19: owner decisions: Critical, safeguard line, gate v2 option A; LOCKED.
 - v1.0 2026-10-19: first version, for owner review (from the plan approved 2026-10-18, aligned with eval-gate skill v2 and EVAL_STANDARD.md v1.0).
