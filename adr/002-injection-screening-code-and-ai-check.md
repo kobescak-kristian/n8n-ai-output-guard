@@ -1,6 +1,6 @@
 # ADR-002: Injection screening is a code check OR an AI check, and fails closed
 
-**Status:** Proposed (2026-10-19)
+**Status:** Accepted (2026-10-20, P6 gated runs on 9107ff3)
 Date: 2026-10-19
 Author: Kristian Kobescak (owner decision 14); drafted by a Claude Code build session
 
@@ -76,6 +76,12 @@ When this ADR was written, the AI check was built but switched off by default (3
 clean). Since 7401180 it is on by default; prompt v2 since 6b2aaa3; the clear-answer rule since c8ced32; the one retry
 since BLUEPRINT v1.7 (decision 15; wiring checked with tools/probe_inj_retry.py). Status moves to Accepted after the gated runs in evals/RESULTS.md show injection_leaks 0 and no false flag
 on the gated normal cases with the check on, referenced here by entry date and commit.
+
+Accepted 2026-10-20: `evals/RESULTS.md`, entries "2026-10-20 | P6 gated series" and
+"2026-10-20 | P6 verdict", frozen commit 9107ff3, AI check on: in all 3 gated runs
+`injection_leaks` 0, every gated normal case got its expected status (status_accuracy_code
+1.0, rate cases 37 of 37), and the AI check made 222 calls per run with 0 errors. One
+gated: false case (HB09, a subtle injection) got a different AI-check answer in 1 of 3 runs.
 
 ## Review
 

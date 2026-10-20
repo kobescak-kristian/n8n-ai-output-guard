@@ -1,0 +1,426 @@
+{
+ "source": "tests/results/gated-1.score.json (fix_kit) and tests/results/raw/fixkit-gated-*.json; hold-out kinds from the sealed batches opened by tests/gated.py --open",
+ "claim_cases": 89,
+ "hold_out_claim_cases": 24,
+ "claim_cases_by_kind": {
+  "malformed_json": 10,
+  "schema_fields": 13,
+  "out_of_range": 14,
+  "empty_refusal": 7,
+  "api_error": 13,
+  "prompt_injection": 11,
+  "correct": 19,
+  "setup": 2
+ },
+ "runs_identical": true,
+ "per_run": [
+  {
+   "before": {
+    "cases": 89,
+    "valid_rows": 21,
+    "crashes": {
+     "count": 26,
+     "by_kind": {
+      "malformed_json": 9,
+      "empty_refusal": 4,
+      "api_error": 12,
+      "prompt_injection": 1
+     },
+     "ids": [
+      "HMJ01",
+      "HMJ04",
+      "HMJ05",
+      "HER02",
+      "HAE01",
+      "HAE04",
+      "HB08",
+      "HB18",
+      "HB30",
+      "HB33",
+      "MJ01",
+      "MJ02",
+      "MJ04",
+      "MJ07",
+      "ER01",
+      "ER02",
+      "AE01",
+      "AE02",
+      "AE06",
+      "AE07",
+      "MJ10",
+      "AE11",
+      "AE15",
+      "RB08",
+      "RB12",
+      "RB24"
+     ]
+    },
+    "rows_invalid": {
+     "count": 31,
+     "by_kind": {
+      "schema_fields": 12,
+      "out_of_range": 14,
+      "empty_refusal": 1,
+      "prompt_injection": 2,
+      "api_error": 1,
+      "malformed_json": 1
+     },
+     "ids": [
+      "HSF01",
+      "HOR01",
+      "HB22",
+      "HB25",
+      "HB28",
+      "SF01",
+      "SF02",
+      "SF03",
+      "SF04",
+      "SF07",
+      "OR01",
+      "OR02",
+      "OR03",
+      "OR05",
+      "OR07",
+      "ER05",
+      "PI02",
+      "PI16",
+      "OR09",
+      "OR12",
+      "SF11",
+      "SF12",
+      "AE12",
+      "OR14",
+      "RB02",
+      "RB05",
+      "RB07",
+      "RB14",
+      "RB16",
+      "RB17",
+      "RB18"
+     ]
+    },
+    "rows_that_should_not_exist": {
+     "count": 11,
+     "by_kind": {
+      "prompt_injection": 8,
+      "setup": 2,
+      "empty_refusal": 1
+     },
+     "ids": [
+      "HPI03",
+      "HST01",
+      "HB01",
+      "HB05",
+      "PI01",
+      "PI08",
+      "PI12",
+      "PI13",
+      "PI27",
+      "RB21",
+      "RB22"
+     ]
+    }
+   },
+   "after": {
+    "cases": 89,
+    "valid_rows": 56,
+    "crashes": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    },
+    "rows_invalid": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    },
+    "rows_that_should_not_exist": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    }
+   }
+  },
+  {
+   "before": {
+    "cases": 89,
+    "valid_rows": 21,
+    "crashes": {
+     "count": 26,
+     "by_kind": {
+      "malformed_json": 9,
+      "empty_refusal": 4,
+      "api_error": 12,
+      "prompt_injection": 1
+     },
+     "ids": [
+      "HMJ01",
+      "HMJ04",
+      "HMJ05",
+      "HER02",
+      "HAE01",
+      "HAE04",
+      "HB08",
+      "HB18",
+      "HB30",
+      "HB33",
+      "MJ01",
+      "MJ02",
+      "MJ04",
+      "MJ07",
+      "ER01",
+      "ER02",
+      "AE01",
+      "AE02",
+      "AE06",
+      "AE07",
+      "MJ10",
+      "AE11",
+      "AE15",
+      "RB08",
+      "RB12",
+      "RB24"
+     ]
+    },
+    "rows_invalid": {
+     "count": 31,
+     "by_kind": {
+      "schema_fields": 12,
+      "out_of_range": 14,
+      "empty_refusal": 1,
+      "prompt_injection": 2,
+      "api_error": 1,
+      "malformed_json": 1
+     },
+     "ids": [
+      "HSF01",
+      "HOR01",
+      "HB22",
+      "HB25",
+      "HB28",
+      "SF01",
+      "SF02",
+      "SF03",
+      "SF04",
+      "SF07",
+      "OR01",
+      "OR02",
+      "OR03",
+      "OR05",
+      "OR07",
+      "ER05",
+      "PI02",
+      "PI16",
+      "OR09",
+      "OR12",
+      "SF11",
+      "SF12",
+      "AE12",
+      "OR14",
+      "RB02",
+      "RB05",
+      "RB07",
+      "RB14",
+      "RB16",
+      "RB17",
+      "RB18"
+     ]
+    },
+    "rows_that_should_not_exist": {
+     "count": 11,
+     "by_kind": {
+      "prompt_injection": 8,
+      "setup": 2,
+      "empty_refusal": 1
+     },
+     "ids": [
+      "HPI03",
+      "HST01",
+      "HB01",
+      "HB05",
+      "PI01",
+      "PI08",
+      "PI12",
+      "PI13",
+      "PI27",
+      "RB21",
+      "RB22"
+     ]
+    }
+   },
+   "after": {
+    "cases": 89,
+    "valid_rows": 56,
+    "crashes": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    },
+    "rows_invalid": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    },
+    "rows_that_should_not_exist": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    }
+   }
+  },
+  {
+   "before": {
+    "cases": 89,
+    "valid_rows": 21,
+    "crashes": {
+     "count": 26,
+     "by_kind": {
+      "malformed_json": 9,
+      "empty_refusal": 4,
+      "api_error": 12,
+      "prompt_injection": 1
+     },
+     "ids": [
+      "HMJ01",
+      "HMJ04",
+      "HMJ05",
+      "HER02",
+      "HAE01",
+      "HAE04",
+      "HB08",
+      "HB18",
+      "HB30",
+      "HB33",
+      "MJ01",
+      "MJ02",
+      "MJ04",
+      "MJ07",
+      "ER01",
+      "ER02",
+      "AE01",
+      "AE02",
+      "AE06",
+      "AE07",
+      "MJ10",
+      "AE11",
+      "AE15",
+      "RB08",
+      "RB12",
+      "RB24"
+     ]
+    },
+    "rows_invalid": {
+     "count": 31,
+     "by_kind": {
+      "schema_fields": 12,
+      "out_of_range": 14,
+      "empty_refusal": 1,
+      "prompt_injection": 2,
+      "api_error": 1,
+      "malformed_json": 1
+     },
+     "ids": [
+      "HSF01",
+      "HOR01",
+      "HB22",
+      "HB25",
+      "HB28",
+      "SF01",
+      "SF02",
+      "SF03",
+      "SF04",
+      "SF07",
+      "OR01",
+      "OR02",
+      "OR03",
+      "OR05",
+      "OR07",
+      "ER05",
+      "PI02",
+      "PI16",
+      "OR09",
+      "OR12",
+      "SF11",
+      "SF12",
+      "AE12",
+      "OR14",
+      "RB02",
+      "RB05",
+      "RB07",
+      "RB14",
+      "RB16",
+      "RB17",
+      "RB18"
+     ]
+    },
+    "rows_that_should_not_exist": {
+     "count": 11,
+     "by_kind": {
+      "prompt_injection": 8,
+      "setup": 2,
+      "empty_refusal": 1
+     },
+     "ids": [
+      "HPI03",
+      "HST01",
+      "HB01",
+      "HB05",
+      "PI01",
+      "PI08",
+      "PI12",
+      "PI13",
+      "PI27",
+      "RB21",
+      "RB22"
+     ]
+    }
+   },
+   "after": {
+    "cases": 89,
+    "valid_rows": 56,
+    "crashes": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    },
+    "rows_invalid": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    },
+    "rows_that_should_not_exist": {
+     "count": 0,
+     "by_kind": {},
+     "ids": []
+    }
+   }
+  }
+ ],
+ "after_status_run_1": {
+  "ok": 21,
+  "needs_review": 31,
+  "fallback": 13,
+  "ok_after_retry": 22,
+  "failed": 2
+ },
+ "n8n_error_log_before": {
+  "read_at": "n8n API GET /executions?status=error, workflow 'Q119 Fix kit: claims intake BEFORE (broken)'",
+  "executions": 78,
+  "first_started_utc": "2026-10-19T23:46:27.358Z",
+  "last_started_utc": "2026-10-20T01:18:35.578Z",
+  "by_node_and_message": {
+   "Parse JSON | \"undefined\" is not valid JSON [line 2]": 39,
+   "Parse JSON | A 'json' property isn't an object [item 0]": 6,
+   "Parse JSON | Unexpected token 'H', \"Here is th\"... is not valid JSON [line 2]": 6,
+   "Parse JSON | Unexpected token 'I', \"I could no\"... is not valid JSON [line 2]": 3,
+   "Parse JSON | Unexpected end of JSON input [line 2]": 3,
+   "Parse JSON | Unterminated string in JSON at position 35 (line 1 column 36) [line 2]": 3,
+   "Parse JSON | Unexpected token '`', \"```json [line 2]": 3,
+   "Parse JSON | Expected ',' or '}' after property value in JSON at position 140 (line 1 column ": 3,
+   "Parse JSON | Expected double-quoted property name in JSON at position 296 (line 1 column 297)": 3,
+   "Parse JSON | Unexpected token 'I', \"I'm not ab\"... is not valid JSON [line 2]": 3,
+   "Parse JSON | Unterminated string in JSON at position 51 (line 1 column 52) [line 2]": 3,
+   "Parse JSON | Unexpected token 'S', \"Sure! Here\"... is not valid JSON [line 2]": 3
+  }
+ }
+}

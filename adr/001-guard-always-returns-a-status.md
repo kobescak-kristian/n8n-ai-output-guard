@@ -1,6 +1,6 @@
 # ADR-001: The guard always returns a status; it never throws and never returns unchecked data
 
-**Status:** Proposed (2026-10-19)
+**Status:** Accepted (2026-10-20, P6 gated runs on 9107ff3)
 Date: 2026-10-19
 Author: Kristian Kobescak (owner); drafted by a Claude Code build session
 
@@ -50,6 +50,10 @@ non-null only when it passed the schema check in that call.
 Unbuilt. Status moves to Accepted only after a recorded full run in
 `evals/RESULTS.md` with `caller_crashes == 0` and `unchecked_data_returned == 0`
 (gate v2 metrics), referenced here by entry date and commit.
+
+Accepted 2026-10-20: `evals/RESULTS.md`, entries "2026-10-20 | P6 gated series" and
+"2026-10-20 | P6 verdict", frozen commit 9107ff3: in all 3 gated runs (231 cases each)
+`caller_crashes` 0 and `unchecked_data_returned` 0.
 
 ## Review
 

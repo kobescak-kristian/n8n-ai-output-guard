@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#334155;stroke-width:1.5;rx:8}
+      .guard{fill:#eef6ff;stroke:#1d4ed8;stroke-width:2}
+      .ok{fill:#ecfdf5;stroke:#047857;stroke-width:1.5}
+      .rev{fill:#fff7ed;stroke:#c2410c;stroke-width:1.5}
+      .t{fill:#0f172a}
+      .s{fill:#475569;font-size:12px}
+      .h{font-weight:600}
+      line,path.l{stroke:#475569;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    </style>
+  </defs>
+  <rect width="960" height="560" fill="#f8fafc"/>
+  <text x="24" y="34" class="t h" font-size="18">n8n AI output guard</text>
+  <text x="24" y="56" class="s">One sub-workflow around any AI step: the caller only sees a checked answer or a clear status.</text>
+
+  <rect x="24" y="90" width="170" height="70" class="box"/>
+  <text x="40" y="118" class="t h">Your workflow</text>
+  <text x="40" y="140" class="s">claim, ticket, lead ...</text>
+
+  <rect x="240" y="80" width="470" height="300" class="guard" rx="10"/>
+  <text x="258" y="104" class="t h">Guard (sub-workflow)</text>
+  <rect x="258" y="118" width="200" height="44" class="box"/><text x="270" y="145" class="t">1 Setup and injection check</text>
+  <rect x="258" y="172" width="200" height="44" class="box"/><text x="270" y="199" class="t">2 Call your AI step</text>
+  <rect x="258" y="226" width="200" height="44" class="box"/><text x="270" y="253" class="t">3 Clean, parse, schema check</text>
+  <rect x="258" y="280" width="200" height="44" class="box"/><text x="270" y="307" class="t">4 One retry with the errors</text>
+  <rect x="490" y="226" width="200" height="44" class="box"/><text x="502" y="253" class="t">5 Fallback (default / 2nd AI)</text>
+  <rect x="490" y="280" width="200" height="44" class="box"/><text x="502" y="307" class="t">6 Log row + alert if due</text>
+  <rect x="490" y="118" width="200" height="88" class="box"/>
+  <text x="502" y="142" class="t h">Your AI step</text>
+  <text x="502" y="162" class="s">any model or node, called</text>
+  <text x="502" y="178" class="s">by an ID set at run time</text>
+  <text x="502" y="194" class="s">(Claude in the demo)</text>
+  <line x1="358" y1="162" x2="358" y2="172"/>
+  <line x1="358" y1="216" x2="358" y2="226"/>
+  <line x1="358" y1="270" x2="358" y2="280"/>
+  <line x1="458" y1="194" x2="490" y2="170"/>
+  <line x1="458" y1="303" x2="490" y2="253"/>
+  <line x1="590" y1="270" x2="590" y2="280"/>
+  <text x="258" y="350" class="s">Never throws. Never returns unchecked data (ADR-001).</text>
+  <text x="258" y="367" class="s">At most 2 calls of your AI step.</text>
+
+  <line x1="194" y1="125" x2="240" y2="125"/>
+
+  <rect x="760" y="90" width="176" height="64" class="ok"/>
+  <text x="774" y="116" class="t h">ok / ok_after_retry</text>
+  <text x="774" y="136" class="s">checked data goes on</text>
+  <rect x="760" y="170" width="176" height="64" class="ok"/>
+  <text x="774" y="196" class="t h">fallback</text>
+  <text x="774" y="216" class="s">your safe value + alert</text>
+  <rect x="760" y="250" width="176" height="64" class="rev"/>
+  <text x="774" y="276" class="t h">needs_review</text>
+  <text x="774" y="296" class="s">nothing is lost</text>
+  <rect x="760" y="330" width="176" height="64" class="rev"/>
+  <text x="774" y="356" class="t h">failed</text>
+  <text x="774" y="376" class="s">setup broken + alert</text>
+  <line x1="710" y1="122" x2="760" y2="122"/>
+  <line x1="710" y1="202" x2="760" y2="202"/>
+  <line x1="710" y1="282" x2="760" y2="282"/>
+  <line x1="710" y1="362" x2="760" y2="362"/>
+
+  <rect x="430" y="430" width="250" height="96" class="rev"/>
+  <text x="446" y="456" class="t h">Slack #ai-review + review form</text>
+  <text x="446" y="478" class="s">approve, correct (checked again) or reject</text>
+  <text x="446" y="498" class="s">approve/correct calls your on_approved</text>
+  <text x="446" y="514" class="s">workflow exactly once</text>
+  <path class="l" d="M848,314 C848,420 760,470 680,470"/>
+  <rect x="24" y="430" width="300" height="96" class="box"/>
+  <text x="40" y="456" class="t h">Data tables</text>
+  <text x="40" y="478" class="s">log: one row per call (status, tries, errors,</text>
+  <text x="40" y="494" class="s">raw answers, model, tokens, seconds)</text>
+  <text x="40" y="510" class="s">review queue: one row per item for a person</text>
+  <path class="l" d="M650,324 C650,410 360,400 324,450"/>
+</svg>
