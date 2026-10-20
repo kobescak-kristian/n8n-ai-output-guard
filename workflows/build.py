@@ -7,6 +7,9 @@ python workflows/build.py --push    -> also creates/updates every Q119 workflow 
                                        of TABLES that an existing q119_* data table lacks (never removes
                                        or changes a column)
 
+Every webhook needs its credential (tools/webhook_keys.py): Header Auth on the machine webhooks, Basic Auth on
+the review page and its submit button.
+
 The workflow logic lives here and in guard_js.py; the JSON files are build output.
 """
 import json
@@ -19,6 +22,7 @@ OUT = ROOT / "workflows"
 sys.path.insert(0, str(OUT))
 sys.path.insert(0, str(ROOT / "tools"))
 import guard_js as J  # noqa: E402
+from webhook_keys import CREDS as WEBHOOK_CREDS, PATHS as WEBHOOK_PATHS  # noqa: E402
 
 BASE = "http://localhost:5678"
 CHANNEL = "#ai-review"
@@ -122,10 +126,19 @@ def slack(w, name, text_expr, x, y=0):
         onError="continueRegularOutput", retryOnFail=True, maxTries=3, waitBetweenTries=2000)
 
 
+def webhook_auth(path):
+    """Webhook parameters and credentials for this path (no open webhook; tools/webhook_keys.py)."""
+    cname = WEBHOOK_PATHS[path]
+    ctype = WEBHOOK_CREDS[cname][0]
+    auth = "headerAuth" if ctype == "httpHeaderAuth" else "basicAuth"
+    return {"authentication": auth}, {"credentials": {ctype: {"id": f"__CRED:{cname}__", "name": cname}}}
+
+
 def webhook(w, name, method, path, x, y=0):
+    params, extra = webhook_auth(path)
     return w.add(name, "n8n-nodes-base.webhook", 2.1, {"httpMethod": method, "path": path,
-                                                       "responseMode": "responseNode", "options": {}}, x, y,
-                 webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, "q119/" + path)))
+                                                       "responseMode": "responseNode", "options": {}, **params}, x, y,
+                 webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, "q119/" + path)), **extra)
 
 
 def respond(w, name, body_expr, x, y=0):
@@ -328,10 +341,11 @@ def build_fixkit_before():
     """The broken workflow of the fix kit, shaped like research post C-17: claim e-mail -> AI -> JSON.parse
     -> claims table. No checks, no retry, no review: the way many client workflows are built."""
     w = WF("fixkit-before", "Q119 Fix kit: claims intake BEFORE (broken)")
+    params, extra = webhook_auth("q119-fixkit-before")
     w.add("Claim e-mail (test entry)", "n8n-nodes-base.webhook", 2.1,
           {"httpMethod": "POST", "path": "q119-fixkit-before", "responseMode": "lastNode",
-           "responseData": "firstEntryJson", "options": {}}, 0,
-          webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, "q119/q119-fixkit-before")))
+           "responseData": "firstEntryJson", "options": {}, **params}, 0,
+          webhookId=str(uuid.uuid5(uuid.NAMESPACE_URL, "q119/q119-fixkit-before")), **extra)
     code(w, "Read e-mail", r"""
 const b = $input.first().json.body || {};
 return [{ json: { role: 'main', attempt: 1, ai_input: b.ai_input, error_list: null, meta: b.meta || {},
@@ -479,9 +493,12 @@ def main():
         for t, n in CRED_NAMES.items():
             if c.get("name") == n and c.get("type") == t:
                 creds[t] = c["id"]
-    missing = set(CRED_NAMES) - set(creds)
+        if WEBHOOK_CREDS.get(c.get("name"), (None,))[0] == c.get("type"):
+            creds[c["name"]] = c["id"]
+    missing = [CRED_NAMES[m] for m in set(CRED_NAMES) - set(creds)] + [n for n in WEBHOOK_CREDS if n not in creds]
     if missing:
-        raise SystemExit("credentials missing in n8n: " + ", ".join(CRED_NAMES[m] for m in missing))
+        raise SystemExit("credentials missing in n8n: " + ", ".join(missing)
+                         + " (webhook credentials: python tools/webhook_keys.py create)")
     # existing q119_* data tables get any column that TABLES has and they lack (the setup workflow only
     # creates missing tables; for example ai_check, added for decision 15)
     tables = {t["name"]: t["id"] for t in api.list_all("/data-tables") if t.get("name") in TABLES}

@@ -14,9 +14,16 @@
     "httpMethod": "POST",
     "path": "q119-setup-tables",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "headerAuth"
    },
-   "webhookId": "e9509ea6-fdaa-5390-b6cc-e175b7dea494"
+   "webhookId": "e9509ea6-fdaa-5390-b6cc-e175b7dea494",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "__CRED:Webhook n8n-output-guard setup__",
+     "name": "Webhook n8n-output-guard setup"
+    }
+   }
   },
   {
    "id": "b3adfb3c-4ec0-5eb4-8d5a-6ae1fcbd7d19",

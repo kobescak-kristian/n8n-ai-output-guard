@@ -24,6 +24,7 @@ def main():
     ap.add_argument("--label", required=True)
     ap.add_argument("--data", action="append")
     ap.add_argument("--gap", type=float, default=1.2)
+    ap.add_argument("--ids", default="", help="comma-separated case IDs (a check run; the gated runs use all)")
     ap.add_argument("--no-classifier", action="store_true", help="code check only, without the AI injection check")
     a = ap.parse_args()
     R.CLASSIFIER["on"] = not a.no_classifier
@@ -32,6 +33,8 @@ def main():
     for f in files:
         doc = json.loads(f.read_text(encoding="utf-8"))
         cases += [c for c in (doc["cases"] if isinstance(doc, dict) else doc) if c["step"] == "claim_intake"]
+    if a.ids:
+        cases = [c for c in cases if c["id"] in a.ids.split(",")]
     ids_seen = [c["id"] for c in cases]
     if len(ids_seen) != len(set(ids_seen)):
         raise SystemExit("duplicate case IDs across the case files")

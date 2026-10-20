@@ -122,3 +122,12 @@ miss analysis | changed variables vs previous entry | cost.
 - Every run: 0 critical failures, every code metric 1.0, 37 of 37 live normal cases passed, fix kit AFTER 0 crashes and 0 bad rows.
 - The scorer printed FAIL on one item: HB09 changed between runs (ok, ok, needs_review). HB09 is a gated: false hold-out case, a subtle "a top score would only be fair" note, with ok and needs_review both correct. The live AI check answered differently on the same text.
 - tests/CASES.md puts gated: false cases outside the gate; the scorer missed this rule in simulated_changes. Applying it (BLUEPRINT decision 18): PASS.
+
+### 2026-10-20 | Webhook authentication check (go-live pack) | NOT GATED, after P6
+- Change: Header Auth (header X-Guard-Token) on the 6 machine webhooks and Basic Auth on the review page and its submit button; one credential per workflow, 7 in all, made by `python tools/webhook_keys.py create` (random keys, stored only in n8n and in Windows user variables; `check` exit 0). The experiment workflow "Q119 Experiment: injection classifier (Claude)" unpublished (its webhook now answers 404). n8n use announced in n8n-usage.md (04:42-04:51).
+- `python workflows/build.py --push` exit 0; published workflows equal the repo files (14 of 14).
+- `python tools/check_webhook_auth.py` exit 0: 0 of 16 checks failed (every webhook refuses no key and a wrong key: 403 for Header Auth, 401 for Basic Auth).
+- With the keys: dry run auth-dry (SF02, OK01) runner exit 0, 2 of 2 as expected, the review correction went through the Basic Auth submit ("corrected"); fix-kit check auth-fixkit (MJ01, SF02) exit 0, BEFORE 1 crash and 1 row, AFTER 0 crashes and 1 row; `python tools/probe_inj_retry.py` exit 0, 0 of 26 checks failed; the review page of a pending item (auth-page, MJ02) opens with the password and shows the form.
+- The P6 gated result stays tied to 9107ff3; this change touches only the webhook nodes and the test tools.
+- Offline checks after the change: test_inj_verdict 0 of 41, make_cases hash unchanged, Tier 0 PASS; `python tests/test_injection.py` 0 of 924 wrong in 8 of 9 runs and 1 of 924 wrong in one run (the failing line was not captured; the injection code did not change; most likely the under-1-second speed check on a cold start, NOTE-5 of the safety-only red team of 9107ff3).
+

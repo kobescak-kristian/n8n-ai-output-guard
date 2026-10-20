@@ -14,9 +14,16 @@
     "httpMethod": "POST",
     "path": "q119-fixkit-after",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "headerAuth"
    },
-   "webhookId": "4f44752f-d2b3-54f3-b94a-85250ee60743"
+   "webhookId": "4f44752f-d2b3-54f3-b94a-85250ee60743",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "__CRED:Webhook n8n-output-guard fixkit-after__",
+     "name": "Webhook n8n-output-guard fixkit-after"
+    }
+   }
   },
   {
    "id": "6b550bae-dae7-545d-8f75-f95b5d2a44ab",

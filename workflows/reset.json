@@ -14,9 +14,16 @@
     "httpMethod": "POST",
     "path": "q119-reset",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "headerAuth"
    },
-   "webhookId": "ce5ff119-9efc-59b9-9675-537c7e856e47"
+   "webhookId": "ce5ff119-9efc-59b9-9675-537c7e856e47",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "__CRED:Webhook n8n-output-guard reset__",
+     "name": "Webhook n8n-output-guard reset"
+    }
+   }
   },
   {
    "id": "9c695493-5c47-5c58-84cf-da523000362b",

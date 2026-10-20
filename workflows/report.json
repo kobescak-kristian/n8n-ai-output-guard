@@ -14,9 +14,16 @@
     "httpMethod": "GET",
     "path": "q119-report",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "headerAuth"
    },
-   "webhookId": "7e80eb7e-e2f0-5fb0-8df5-0fbf053b97f4"
+   "webhookId": "7e80eb7e-e2f0-5fb0-8df5-0fbf053b97f4",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "__CRED:Webhook n8n-output-guard report__",
+     "name": "Webhook n8n-output-guard report"
+    }
+   }
   },
   {
    "id": "11494f84-29e2-5f57-8c68-476721b472b9",

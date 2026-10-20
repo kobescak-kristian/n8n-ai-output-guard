@@ -27,7 +27,7 @@ Built with n8n 2.43.7 (self-hosted), Claude Sonnet 5.5 as the AI step, Claude Ha
 ### Plug it into your workflow (5 steps)
 1. **Put your AI step in its own small sub-workflow.** It receives `ai_input` (and, on a retry, `error_list`) and returns `http_status`, `stop_reason`, `text`, `model`, `tokens_in`, `tokens_out` (or `transport_error`). Any model or node works; `workflows/step-claim_intake.json` is an example with Claude.
 2. **Write a JSON Schema** for the answer you expect (`tests/schemas/` has three examples).
-3. **Import the guard** (`workflows/guard.json`) and, if you want screening by AI too, the injection check (`workflows/injection-check.json`). Set your Slack channel and credentials.
+3. **Import the guard** (`workflows/guard.json`), the review form (`workflows/review.json`) and, if you want screening by AI too, the injection check (`workflows/injection-check.json`). Set your Slack channel and credentials, and give the review form a Basic Auth credential for your reviewers.
 4. **Call the guard** with Execute Workflow and pass: `ai_step_id`, `ai_input`, `schema`, `fallback` (`{"mode": "none"}`, `{"mode": "default", "value": {...}}` or `{"mode": "second_step", "second_step_id": "..."}`), `on_approved_id` (the workflow that gets approved items), and `options.injection_check_step_id` to switch the AI injection check on.
 5. **Route on `status`**: `ok`, `ok_after_retry` and `fallback` carry checked `data`; `needs_review` and `failed` carry no data (the item waits for a person, or the setup needs fixing). `workflows/fixkit-after.json` shows this with one IF node.
 
@@ -53,7 +53,7 @@ Root cause and fix: [FIX_REPORT.md](FIX_REPORT.md).
 - **The AI check can answer differently** on the same borderline text from one run to the next.
 - **Send plain text or flat JSON** as `ai_input`: text nested 49 or more levels deep is not screened.
 - **Personal data:** review messages show an excerpt of the input (up to 300 characters) in Slack. Pick a private channel; the demo uses made-up data only.
-- **Webhooks in the demo have no authentication.** Add Header Auth before any real use.
+- **Webhooks are locked.** Each machine webhook needs its own key (n8n Header Auth, header `X-Guard-Token`); the review page and its submit button ask for a reviewer password (n8n Basic Auth). `tools/webhook_keys.py` creates the credentials. The test-only workflows (test caller, report, reset, table setup) are not part of a client copy.
 - **Time:** with retries, one guard call can take up to about 170 seconds.
 - **Tested only** on self-hosted n8n 2.43.7. Not for streaming answers, tool-use loops or AI Agent nodes as the wrapped step.
 
@@ -62,3 +62,4 @@ Root cause and fix: [FIX_REPORT.md](FIX_REPORT.md).
 |---|---|---|
 | 0.0 | 2026-10-18 | Scaffold |
 | 1.0 | 2026-10-20 | Guard, review queue, injection check and fix kit; gated test passed on commit 9107ff3 |
+| 1.1 | 2026-10-20 | Every webhook locked (Header Auth or Basic Auth). Checked: all 8 webhooks refuse a call without the key or with a wrong key (16 of 16), and a dry run, a fix-kit run and the AI-check probe pass with the keys. The gated result was measured on 1.0. |

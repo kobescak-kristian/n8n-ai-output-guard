@@ -14,9 +14,16 @@
     "httpMethod": "POST",
     "path": "q119-test",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "headerAuth"
    },
-   "webhookId": "46d4b785-de0d-5865-b23a-722b25bcbc2d"
+   "webhookId": "46d4b785-de0d-5865-b23a-722b25bcbc2d",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "__CRED:Webhook n8n-output-guard test-caller__",
+     "name": "Webhook n8n-output-guard test-caller"
+    }
+   }
   },
   {
    "id": "162f4a7e-11dd-5150-a1a2-cc5898fa35cd",

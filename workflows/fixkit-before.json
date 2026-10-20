@@ -15,9 +15,16 @@
     "path": "q119-fixkit-before",
     "responseMode": "lastNode",
     "responseData": "firstEntryJson",
-    "options": {}
+    "options": {},
+    "authentication": "headerAuth"
    },
-   "webhookId": "46282498-5900-5f2d-947b-b9bb082d3c58"
+   "webhookId": "46282498-5900-5f2d-947b-b9bb082d3c58",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "__CRED:Webhook n8n-output-guard fixkit-before__",
+     "name": "Webhook n8n-output-guard fixkit-before"
+    }
+   }
   },
   {
    "id": "1212736a-bede-5cfd-a12f-b101e9e3cfef",

@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 from n8n_api import Api, load_env  # noqa: E402
+import webhook_keys as WK  # noqa: E402
 import jsonschema  # noqa: E402
 
 VALS = {s: jsonschema.Draft202012Validator(json.loads((ROOT / "tests" / "schemas" / f"{s}.json").read_text(encoding="utf-8")),
@@ -37,12 +38,14 @@ NAMES = {"mock": "Q119 AI step: mock (simulated)", "on_approved": "Q119 Test: on
          "lead_score": "Q119 AI step: lead score (Claude)"}
 
 
-def http(method, url, body=None, form=None, timeout=60):
+def http(method, url, body=None, form=None, timeout=60, auth=True):
     data, headers = None, {}
     if body is not None:
         data, headers = json.dumps(body).encode("utf-8"), {"Content-Type": "application/json"}
     if form is not None:
         data, headers = urllib.parse.urlencode(form).encode("utf-8"), {"Content-Type": "application/x-www-form-urlencoded"}
+    if auth and "/webhook/" in url:  # the key of this webhook (tools/webhook_keys.py), never printed
+        headers.update(WK.auth_headers(urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]))
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:

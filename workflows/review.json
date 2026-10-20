@@ -14,9 +14,16 @@
     "httpMethod": "POST",
     "path": "q119-review-submit",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "basicAuth"
    },
-   "webhookId": "d36dc0e6-4a8a-5e6e-869e-75f87dedb5be"
+   "webhookId": "d36dc0e6-4a8a-5e6e-869e-75f87dedb5be",
+   "credentials": {
+    "httpBasicAuth": {
+     "id": "__CRED:Webhook n8n-output-guard review__",
+     "name": "Webhook n8n-output-guard review"
+    }
+   }
   },
   {
    "id": "17be72bf-bc9f-5335-8892-f42bfd1e1811",
@@ -259,9 +266,16 @@
     "httpMethod": "GET",
     "path": "q119-review",
     "responseMode": "responseNode",
-    "options": {}
+    "options": {},
+    "authentication": "basicAuth"
    },
-   "webhookId": "c87cf947-7bc4-518c-bf0e-1e899032df2d"
+   "webhookId": "c87cf947-7bc4-518c-bf0e-1e899032df2d",
+   "credentials": {
+    "httpBasicAuth": {
+     "id": "__CRED:Webhook n8n-output-guard review__",
+     "name": "Webhook n8n-output-guard review"
+    }
+   }
   },
   {
    "id": "8b9a2219-584b-513d-bb1b-926e1817fa3e",
