@@ -52,9 +52,9 @@ Review form -> approve / correct (must pass the schema) / reject -> on_approved 
 Test tools: Python runner, mock AI server on port 8120 (answers like the Anthropic API per case), read-only report workflow.
 ```
 
-Stack: local n8n 2.43.7 (names Q119, tag q119, data tables q119_*, webhooks /webhook/q119-*). Claude through the Anthropic workspace created by Kristian 2026-10-19 (key only in an n8n credential and LastPass); default model Sonnet 5.5, recorded per run (model is free to change, eval-gate skill §7). Slack demo workspace, channel #ai-review.
+Stack: local n8n 2.43.7 (names Q119, tag q119, data tables q119_*, webhooks /webhook/q119-*). Claude through the Anthropic workspace created by Kristian 2026-10-19 (key only in an n8n credential and a password manager); default model Sonnet 5.5, recorded per run (model is free to change, eval-gate skill §7). Slack demo workspace, channel #ai-review.
 
-Key and credential names (naming standard by Kristian, 2026-10-19): every key, credential and app of this build is named `n8n-output-guard`, with no backlog or item number: n8n credentials `Anthropic n8n-output-guard` and `Slack n8n-output-guard`, n8n API key label `n8n-output-guard`, Slack app `n8n-output-guard`, LastPass entries the same. n8n workflow, tag, table and webhook names keep the Q119 prefix (shared-n8n rule).
+Key and credential names (naming standard by Kristian, 2026-10-19): every key, credential and app of this build is named `n8n-output-guard`, with no backlog or item number: n8n credentials `Anthropic n8n-output-guard` and `Slack n8n-output-guard`, n8n API key label `n8n-output-guard`, Slack app `n8n-output-guard`, password manager entries the same. n8n workflow, tag, table and webhook names keep the Q119 prefix (shared-n8n rule).
 
 Non-negotiables:
 - The guard always returns a status; it never throws and never returns unchecked data (first ADR).
