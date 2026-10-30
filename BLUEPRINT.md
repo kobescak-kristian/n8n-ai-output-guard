@@ -133,7 +133,7 @@ Eval level: Decided Critical, Kristian, 2026-10-19
 | P5 | fix kit: before/after workflows, FIX_REPORT.md | both runs recorded; AFTER has 0 crashes and 0 bad rows |
 | P5b | pre-gate readiness (checks before the gated runs; see 7. decision 9) | R2: 3 full visible runs in a row meet every gate threshold (development runs, labelled not gated); R3: red-team report committed with 0 open breaks; R4: frozen workflow commit with a checkpoint-review verdict OK, dry run on 2 cases exit 0 |
 | P6 | 3 gated runs (visible + hold-out, one frozen workflow commit) | 3 entries in RESULTS.md, runner exit 0; PASS or FAIL recorded |
-| P7 | README in client words + diagram + 5-step plug-in guide + limits, cover image, Loom video | publish gate is a separate decision by Kristian |
+| P7 | README in client words + diagram + 5-step plug-in guide + limits, cover image | publish gate is a separate decision by Kristian |
 
 ## 7. Decisions
 

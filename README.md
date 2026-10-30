@@ -58,10 +58,10 @@ Root cause and fix: [FIX_REPORT.md](FIX_REPORT.md).
 - **Webhooks are locked.** Each machine webhook needs its own key (n8n Header Auth, header `X-Guard-Token`); the review page and its submit button ask for a reviewer password (n8n Basic Auth). `tools/webhook_keys.py` creates the credentials. The test-only workflows (test caller, report, reset, table setup) are not part of a client copy.
 - **Time:** with retries, one guard call can take up to about 170 seconds.
 - **Tested only** on self-hosted n8n 2.43.7. Not for streaming answers, tool-use loops or AI Agent nodes as the wrapped step.
-- **Where it was run:** the gated runs and the test runner (`tests/runner.py`, `tests/gated.py`) need a running n8n, an Anthropic key and a Slack workspace; they were run on one Windows machine. The offline checks (`tests/test_injection.py`, `tests/test_inj_verdict.py`, `tests/make_cases.py`) need only Python and Node; they were also run on Windows only. A CI job for Linux, macOS and Windows follows after the repo is public.
+- **Where it was run:** the gated runs and the test runner (`tests/runner.py`, `tests/gated.py`) need a running n8n, an Anthropic key and a Slack workspace; they were run on one Windows machine. The offline checks (`tests/test_injection.py`, `tests/test_inj_verdict.py`, `tests/test_make_cases.py`, `tests/make_cases.py`) need only Python (with the jsonschema package) and Node; CI runs them on Linux, macOS and Windows on every push (`.github/workflows/tests.yml`).
 
 ## Status
-Version 1.1, 2026-10-20: built and tested. The gated test passed on version 1.0 (commit 9107ff3); version 1.1 adds webhook authentication. A video walkthrough follows.
+Version 1.1, 2026-10-20: built and tested. The gated test passed on version 1.0 (commit 9107ff3); version 1.1 adds webhook authentication.
 
 ## Version Log
 | version | date | change |
