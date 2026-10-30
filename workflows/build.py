@@ -1,4 +1,4 @@
-"""Generate and load the n8n workflows of the AI output guard (Q-119).
+"""Generate and load the n8n workflows of the AI output guard.
 
 python workflows/build.py           -> workflows/*.json (placeholders, no credential IDs)
 python workflows/build.py --push    -> also creates/updates every Q119 workflow in local n8n through the
@@ -235,7 +235,7 @@ def build_live_step(task, label):
 
 def build_injection_check(url="https://api.anthropic.com/v1/messages", key="injection-check",
                           name="Q119 Injection check: Claude Haiku 5.5"):
-    # one retry on an API error a retry can fix (owner decision 15); the last node that runs gives the answer
+    # one retry on an API error a retry can fix (decision 15); the last node that runs gives the answer
     w = WF(key, name)
     trigger(w)
     code(w, "Build request", J.INJ_REQUEST.replace("__PROMPT__", json.dumps(J.INJ_PROMPT)), 1)
@@ -338,7 +338,7 @@ def build_review():
 
 
 def build_fixkit_before():
-    """The broken workflow of the fix kit, shaped like research post C-17: claim e-mail -> AI -> JSON.parse
+    """The broken workflow of the fix kit, shaped like a real insurance claims job post: claim e-mail -> AI -> JSON.parse
     -> claims table. No checks, no retry, no review: the way many client workflows are built."""
     w = WF("fixkit-before", "Q119 Fix kit: claims intake BEFORE (broken)")
     params, extra = webhook_auth("q119-fixkit-before")

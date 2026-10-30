@@ -21,7 +21,7 @@ When sources disagree: an adopted ADR outranks the text it amends;
 documents state intent, implementation and tests state behaviour, and a
 gap between them is a finding to surface, not something to silently
 reconcile; `STATE.md` is the status surface; if canonical sources
-conflict, stop and ask the owner.
+conflict, stop and ask Kristian.
 
 ## Task routing
 

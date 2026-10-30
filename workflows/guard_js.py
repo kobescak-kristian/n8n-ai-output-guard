@@ -270,7 +270,7 @@ return [{ json: { state: S, step: { text: stringsIn(S.ai_input).join('\n'), meta
 """
 
 READ_INJ = r"""
-// AI injection check (owner decision 14, BLUEPRINT.md section 7, ADR-002): code check OR AI check;
+// AI injection check (decision 14, BLUEPRINT.md section 7, ADR-002): code check OR AI check;
 // an AI check that fails sends the item to review with an alert (fail-closed, ADR-001)
 const S = $('Prepare injection check').first().json.state;
 const r = $input.first().json || {};
@@ -548,7 +548,7 @@ return [{ json: { timeout_ms: (it.options || {}).timeout_ms || 20000, body: { mo
 
 INJ_NORMALIZE = r"""
 // try __TRY__ of at most 2. An API error that a retry can fix (no reply at all: timeout, closed or refused
-// connection, other network error; HTTP 408, 429, 5xx) on try 1 asks for one retry (owner decision 15);
+// connection, other network error; HTTP 408, 429, 5xx) on try 1 asks for one retry (decision 15);
 // any other error, or an error on try 2, is final.
 const TRY = __TRY__;
 const r = $input.first().json || {};
@@ -576,7 +576,7 @@ const raw = (Array.isArray(b.content) ? b.content : []).filter((x) => x && x.typ
 // punctuation, and the answer ended normally. Anything else (prose, both words, a cut or refused answer) is an
 // error: fail-closed, the item goes to review with an alert; not retried.
 const word = raw.replace(/^[\s*_`"'“”‘’«».!]+|[\s*_`"'“”‘’«».!]+$/g, '').toUpperCase();
-const ended = b.stop_reason === 'end_turn';  // owner decision 15: stop reason end_turn only
+const ended = b.stop_reason === 'end_turn';  // decision 15: stop reason end_turn only
 const verdict = ended && (word === 'YES' || word === 'NO') ? word.toLowerCase() : 'error';
 return [{ json: { verdict, tries: TRY, retry: false, wait: 0, model: b.model || '', tokens_in: (b.usage || {}).input_tokens || 0,
   tokens_out: (b.usage || {}).output_tokens || 0,

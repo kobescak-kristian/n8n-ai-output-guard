@@ -3,7 +3,7 @@
 python tests/test_inj_verdict.py        (needs node on PATH)
 
 Checks the clear-answer rule (the whole reply is YES or NO and the answer ended normally, ADR-002) and the one retry on an
-API error a retry can fix (owner decision 15): retried on try 1 only; unclear answers and other errors never.
+API error a retry can fix (decision 15): retried on try 1 only; unclear answers and other errors never.
 Only the verdict code string is run here; the sub-workflow wiring is checked by tools/probe_inj_retry.py.
 """
 import json

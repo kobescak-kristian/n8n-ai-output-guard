@@ -2,17 +2,17 @@
 
 **Status:** Accepted (2026-10-20, P6 gated runs on 9107ff3)
 Date: 2026-10-19
-Author: Kristian Kobescak (owner); drafted by a Claude Code build session
+Author: Kristian Kobescak; drafted by a Claude Code build session
 
 ## Context
 
 The guard is an n8n sub-workflow that wraps a caller's AI step (BLUEPRINT.md
 sections 2-3). The client problem it answers is a workflow that crashes or
-saves bad data when the AI answer is broken (research post C-17). If the guard
+saves bad data when the AI answer is broken (a real insurance claims job post). If the guard
 itself can throw an error, the caller's run stops and the item is lost, which
 is the same failure in a new place. If the guard can return data that did not
 pass the checks, the caller writes a false record. The eval gate is Critical
-(owner, 2026-10-19) and names both as critical failures: CF3 lost item and CF1
+(Kristian, 2026-10-19) and names both as critical failures: CF3 lost item and CF1
 false record (`evals/eval_config.yaml` v2).
 
 ## Decision

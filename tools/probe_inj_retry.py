@@ -1,4 +1,4 @@
-"""Probe: the AI injection check retries once on an API error that a retry can fix (owner decision 15).
+"""Probe: the AI injection check retries once on an API error that a retry can fix (decision 15).
 
 python tools/probe_inj_retry.py
 

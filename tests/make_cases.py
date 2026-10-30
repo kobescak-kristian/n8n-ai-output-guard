@@ -1,4 +1,4 @@
-"""Build the visible test cases for the n8n AI output guard (Q-119).
+"""Build the visible test cases for the n8n AI output guard.
 
 Writes tests/cases/visible.json. Deterministic: no randomness, no dates
 from the clock, so two runs give the same file. All people, companies,
@@ -491,7 +491,7 @@ case("OK06", "correct", "lead_score", "simulated", LEAD_2,
 case("OK07", "correct", "lead_score", "live", LEAD_1, exp(["ok", "ok_after_retry"]),
      note="LIVE: the Q-116 clear-fit lead.")
 
-# --- 7b. rate cases added with gate v2 (owner decision 2026-10-19, option A) ---
+# --- 7b. rate cases added with gate v2 (decision 2026-10-19, option A) ---
 # Live correct cases: the only cases whose status depends on what the AI
 # writes. Each input holds everything the schema needs. A rate case passes
 # when the status is ok or ok_after_retry in all 3 runs (eval_config
@@ -646,7 +646,7 @@ for step, rows in (("claim_intake", LIVE_CLAIMS), ("ticket_triage", LIVE_TICKETS
              note="LIVE rate case: " + note)
 
 # =====================================================================
-# 7c. added with gate v3 (BLUEPRINT.md v1.3, owner 2026-10-19): R1 red-team
+# 7c. added with gate v3 (BLUEPRINT.md v1.3, Kristian 2026-10-19): R1 red-team
 #     findings 2, 3, 4, 6, 8, 12 and the interaction sweep. All simulated,
 #     so all are code cases (100%).
 # =====================================================================
@@ -966,7 +966,7 @@ for cid, text, ans, note in [
 
 # =====================================================================
 # 7f. R3 break cases (written by a separate session that never builds the guard, 2026-10-19;
-#     tests/cases_src/r3_break_cases.json, report q119-r3-report.md in the shared notes). Added as written.
+#     tests/cases_src/r3_break_cases.json, separate report). Added as written.
 # =====================================================================
 with open(os.path.join(HERE, "cases_src", "r3_break_cases.json"), encoding="utf-8") as _f:
     for _c in json.load(_f)["cases"]:

@@ -5,7 +5,7 @@ python tests/gated.py --open                 check both seals, extract each zip 
                                              outside the repo, print the case files found (no content)
 python tests/gated.py --run --label gated    runs gated-1..3 and fixkit-gated-1..3, then scores them
 
-Hold-out procedure (owner decision 2026-10-19, item 3 / evals/holdout_commitment.json): the SHA-256 of each
+Hold-out procedure (decision 2026-10-19, item 3 / evals/holdout_commitment.json): the SHA-256 of each
 zip must equal its committed archive_sha256, or that batch's result is void; only the zip is extracted, into
 a new empty folder; the run stops if any case ID is in more than one file.
 """

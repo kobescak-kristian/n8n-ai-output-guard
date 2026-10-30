@@ -1,4 +1,4 @@
-"""Test runner for the n8n AI output guard (Q-119).
+"""Test runner for the n8n AI output guard.
 
 Runs cases through the test caller workflow, submits the scripted review actions
 through the review form (after every guard call, in reverse case order), reads
@@ -31,7 +31,7 @@ VALS = {s: jsonschema.Draft202012Validator(json.loads((ROOT / "tests" / "schemas
         for s in ("claim_intake", "ticket_triage", "lead_score")}
 
 MOCK = "http://127.0.0.1:8120"
-CLASSIFIER = {"on": True}  # the guard also runs the AI injection check (owner decision 14); --no-classifier turns it off
+CLASSIFIER = {"on": True}  # the guard also runs the AI injection check (decision 14); --no-classifier turns it off
 NAMES = {"mock": "Q119 AI step: mock (simulated)", "on_approved": "Q119 Test: on_approved recorder",
          "injection_check": "Q119 Injection check: Claude Haiku 5.5",
          "claim_intake": "Q119 AI step: claim intake (Claude)", "ticket_triage": "Q119 AI step: ticket triage (Claude)",

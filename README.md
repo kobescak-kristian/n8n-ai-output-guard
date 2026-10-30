@@ -1,5 +1,7 @@
 # n8n AI Output Guard
 
+A reusable n8n sub-workflow that checks every AI answer before your workflow uses it: schema check, one retry, fallback, a person in Slack for what still fails, alerts and a log.
+
 ![AI Output Guard: 26 crashes and 42 bad rows before, 0 and 0 after](docs/cover.png)
 
 ## Problem
@@ -32,7 +34,7 @@ Built with n8n 2.43.7 (self-hosted), Claude Sonnet 5.5 as the AI step, Claude Ha
 5. **Route on `status`**: `ok`, `ok_after_retry` and `fallback` carry checked `data`; `needs_review` and `failed` carry no data (the item waits for a person, or the setup needs fixing). `workflows/fixkit-after.json` shows this with one IF node.
 
 ## Outcome
-**Gated test.** 3 runs over 231 cases. 66 of them were written blind by a separate session that never saw the code, and sealed before the first gated run. In every run: no unchecked data returned, no crash, no obvious injection let through, and 37 of 37 live normal cases passed. One known-limit case, a subtle "please give us a top score" note that its author marked as not gated, was sent to review in 1 of 3 runs and passed in the other 2, because the AI check is a live model. The scorer counted that as a FAIL. After the run, the owner ruled that cases marked not gated are outside the gate, as the test rules say. Full record: [evals/RESULTS.md](evals/RESULTS.md).
+**Gated test.** 3 runs over 231 cases. 66 of them were written blind by a separate session that never saw the code, and sealed before the first gated run. In every run: no unchecked data returned, no crash, no obvious injection let through, and 37 of 37 live normal cases passed. One known-limit case, a subtle "please give us a top score" note that its author marked as not gated, was sent to review in 1 of 3 runs and passed in the other 2, because the AI check is a live model. The scorer counted that as a FAIL. After the run, Kristian ruled that cases marked not gated are outside the gate, as the test rules say. Full record: [evals/RESULTS.md](evals/RESULTS.md).
 
 **Before and after on a broken claims workflow** (same 89 claim cases, in each of the 3 gated runs):
 
@@ -56,6 +58,10 @@ Root cause and fix: [FIX_REPORT.md](FIX_REPORT.md).
 - **Webhooks are locked.** Each machine webhook needs its own key (n8n Header Auth, header `X-Guard-Token`); the review page and its submit button ask for a reviewer password (n8n Basic Auth). `tools/webhook_keys.py` creates the credentials. The test-only workflows (test caller, report, reset, table setup) are not part of a client copy.
 - **Time:** with retries, one guard call can take up to about 170 seconds.
 - **Tested only** on self-hosted n8n 2.43.7. Not for streaming answers, tool-use loops or AI Agent nodes as the wrapped step.
+- **Where it was run:** the gated runs and the test runner (`tests/runner.py`, `tests/gated.py`) need a running n8n, an Anthropic key and a Slack workspace; they were run on one Windows machine. The offline checks (`tests/test_injection.py`, `tests/test_inj_verdict.py`, `tests/make_cases.py`) need only Python and Node; they were also run on Windows only. A CI job for Linux, macOS and Windows follows after the repo is public.
+
+## Status
+Version 1.1, 2026-10-20: built and tested. The gated test passed on version 1.0 (commit 9107ff3); version 1.1 adds webhook authentication. A video walkthrough follows.
 
 ## Version Log
 | version | date | change |

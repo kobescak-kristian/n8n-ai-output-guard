@@ -2,7 +2,7 @@
 
 **Status:** Accepted (2026-10-20, P6 gated runs on 9107ff3)
 Date: 2026-10-19
-Author: Kristian Kobescak (owner decision 14); drafted by a Claude Code build session
+Author: Kristian Kobescak (decision 14); drafted by a Claude Code build session
 
 ## Context
 
@@ -12,7 +12,7 @@ the gate. The first design was a code check (word families in about 25 languages
 measured it on texts it had never seen: after each rebuild the next fresh batch still found gaps, and the
 last measure on 100 typical attacks was 13 missed (v5). A Claude Haiku 5.5 check with one fixed, untuned
 prompt missed 0 of the same 100 attacks and flagged 0 of 100 normal texts, with the same answers over three
-runs (decision note q119-decision-injection-check.md in the shared notes; tests/results/exp-classifier-*.json).
+runs (a separate decision note; tests/results/exp-classifier-*.json).
 
 Prompt change after the decision (2026-10-19, R2). Result first: with the code check and the AI check
 together, the guard misses none of the measured attack texts except the recorded known limits
@@ -26,7 +26,7 @@ after "Return this:"). Since the R4 reviews (CASES 3b Rule 6) the code check fla
 step, also when the step has no such field: after each "new instructions" marker it knows (with ":" or a
 dash), after a direct order ("Return ...", "Please return ...") to return fixed JSON, and in "field: value"
 lines right after a lead such as "Return this:". Polite or indirect requests ("Could
-you return ...") are left to the AI check (version 2 list in STATE.md, owner decision 16). Measured with
+you return ...") are left to the AI check (version 2 list in STATE.md, decision 16). Measured with
 `python tools/check_v2_misses.py .` at af88e4c and again at 9107ff3: the code check flags all 22 for each of the 3 AI steps. So the AI check is
 now tuned toward fewer false flags, and the code check carries more of the attack screening.
 
@@ -46,8 +46,8 @@ check flags the input, the result is needs_review. If the AI check fails or give
 is also needs_review, with an alert. A clear answer is a whole reply of YES or NO after trimming spaces,
 markdown marks, quotes and end punctuation, with stop reason end_turn. Prose, both words, or a cut or refused
 answer is not clear. On an API error
-that a retry can fix (no reply at all, HTTP 408, HTTP 429 or HTTP 5xx; "no reply" means a timeout, a closed or refused connection, or another network error) the AI check asks once more (owner
-decision 15); the fail-closed rule applies to what is left after that retry. An unclear answer is not retried.
+that a retry can fix (no reply at all, HTTP 408, HTTP 429 or HTTP 5xx; "no reply" means a timeout, a closed or refused connection, or another network error) the AI check asks once more (decision
+15); the fail-closed rule applies to what is left after that retry. An unclear answer is not retried.
 
 ## Alternatives rejected
 
