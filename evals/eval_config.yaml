@@ -166,7 +166,7 @@ secondary_reported_not_gated:
   fix_kit_before: "BEFORE workflow on the same claim cases: crashes, bad rows saved, silent wrong rows; recorded, not gated"
   guard_overhead: "median and 90th percentile seconds added by the guard on ok results (guard time minus AI step time)"
   cost: "tokens and AI cost of live calls per run, from logged token counts and the model price at run date"
-  manual_slack_pass: "one real Slack review pass by the owner for the Loom; recorded, not gated"
+  manual_slack_pass: "one real Slack review pass by the owner for a screen recording; recorded, not gated"
 
 # --- Comparison policy (binding for case files and the scorer alike) ---
 comparison_policy:
