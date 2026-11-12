@@ -8,13 +8,16 @@ to, never this file.
 
 A reusable n8n sub-workflow that wraps any AI step: it checks every AI answer against a fixed format, retries once, uses a fallback, sends what still fails to a person in Slack, alerts on errors and logs every call; it ships with one before/after fix of a broken workflow. Human overview: `README.md`.
 
+Classification: PROJECT.
+
 ## Authority and conflict handling
 
 | Question | Canonical source |
 |---|---|
 | What the system is and claims | `README.md` |
 | Why a design decision was made | `adr/` |
-| Build status, open decisions, change history | `STATE.md` |
+| Build status, open decisions | `STATE.md` |
+| Change history | git history; `README.md` Version Log |
 | What the implementation actually does | source, tests and configuration inspected together |
 
 When sources disagree: an adopted ADR outranks the text it amends;
