@@ -13,6 +13,6 @@ Gated test PASS, 2026-10-20, on version 1.0 (commit 9107ff3). Results and limits
 
 ## Open
 
-- Deferred: version 2 list (BLUEPRINT.md decision 16): injection forms found after the check was frozen.
+- Deferred: version 2 list: injection forms found after the check was frozen.
   Waits for a version 2 build. List: `evals/RESULTS.md`, section "Version 2 list".
 - Next: none scheduled.
