@@ -1,7 +1,7 @@
 # FIX_REPORT: claims intake workflow
 
 ```
-AUTOMATION DEBUG REPORT | Q119 Fix kit: claims intake BEFORE (broken) | 2026-10-20
+AUTOMATION DEBUG REPORT | Fix kit: claims intake BEFORE (broken) | 2026-10-20
 Status: fixed (gated runs fixkit-gated-1, -2 and -3 on commit 9107ff3 succeeded)
 Confidence: confirmed
 

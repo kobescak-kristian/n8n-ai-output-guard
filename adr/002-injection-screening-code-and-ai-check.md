@@ -74,7 +74,7 @@ that a retry can fix (no reply at all, HTTP 408, HTTP 429 or HTTP 5xx; "no reply
 
 When this ADR was written, the AI check was built but switched off by default (3aaf110, dev run visible-A1
 clean). Since 7401180 it is on by default; prompt v2 since 6b2aaa3; the clear-answer rule since c8ced32; the one retry
-since BLUEPRINT v1.7 (decision 15; wiring checked with tools/probe_inj_retry.py). Status moves to Accepted after the gated runs in evals/RESULTS.md show injection_leaks 0 and no false flag
+since build plan v1.7 (decision 15; wiring checked with tools/probe_inj_retry.py). Status moves to Accepted after the gated runs in evals/RESULTS.md show injection_leaks 0 and no false flag
 on the gated normal cases with the check on, referenced here by entry date and commit.
 
 Accepted 2026-10-20: `evals/RESULTS.md`, entries "2026-10-20 | P6 gated series" and
