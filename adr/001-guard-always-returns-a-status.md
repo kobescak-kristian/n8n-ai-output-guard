@@ -6,7 +6,7 @@ Author: Kristian Kobescak; drafted by a Claude Code build session
 
 ## Context
 
-The guard is an n8n sub-workflow that wraps a caller's AI step (BLUEPRINT.md
+The guard is an n8n sub-workflow that wraps a caller's AI step (build plan,
 sections 2-3). The client problem it answers is a workflow that crashes or
 saves bad data when the AI answer is broken (a real insurance claims job post). If the guard
 itself can throw an error, the caller's run stops and the item is lost, which

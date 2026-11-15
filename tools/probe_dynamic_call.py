@@ -1,4 +1,4 @@
-"""First-hour check (BLUEPRINT.md phase P2): can n8n 2.43.7 call a sub-workflow
+"""First-hour check (build phase P2): can n8n 2.43.7 call a sub-workflow
 whose ID is set at run time, and does an error inside it come back as data?
 
 Creates Q119 Probe workflows through the n8n API, calls them through a test
